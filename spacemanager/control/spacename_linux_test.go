@@ -7,7 +7,7 @@ import (
 )
 
 func TestValidSpaceName(t *testing.T) {
-	for _, ok := range []string{"production", "altfab-production", "www", "nats_global", "Staging1"} {
+	for _, ok := range []string{"production", "acme-production", "www", "nats_global", "Staging1"} {
 		if err := validSpaceName(ok); err != nil {
 			t.Errorf("%q rejected: %v", ok, err)
 		}

@@ -9,7 +9,7 @@
 //
 // The CLI itself runs no LLM: onboarding is deterministic and the
 // reasoning belongs to the developer's own assistant. The runner package
-// (apps/sklp/pipeline) is the single source of truth for task execution.
+// (pipeline) is the single source of truth for task execution.
 package main
 
 import (

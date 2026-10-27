@@ -23,7 +23,7 @@ func TestUnknownStepFieldIsRejected(t *testing.T) {
 kind: pipeline
 steps:
   - name: facade-test
-    workdir: apps/core
+    workdir: services/api
     run: go build ./...
 `)
 	_, err := LoadPipeline(path)
@@ -96,22 +96,22 @@ func TestValidPipelineStillLoads(t *testing.T) {
 	path := writePipeline(t, "ci.yaml", `version: 1
 kind: pipeline
 scopes:
-  facade: ["apps/core/**"]
+  facade: ["services/api/**"]
 tools:
   go: "1.25.0"
 steps:
   - name: facade-test
     scope: [facade]
     tools: [go]
-    cwd: apps/core
+    cwd: services/api
     run: go build ./...
 `)
 	p, err := LoadPipeline(path)
 	if err != nil {
 		t.Fatalf("valid pipeline rejected: %v", err)
 	}
-	if p.Steps[0].Cwd != "apps/core" {
-		t.Errorf("Cwd = %q, want apps/core", p.Steps[0].Cwd)
+	if p.Steps[0].Cwd != "services/api" {
+		t.Errorf("Cwd = %q, want services/api", p.Steps[0].Cwd)
 	}
 }
 
@@ -121,7 +121,7 @@ kind: pipeline
 targets:
   anything: {a: 1}
 service_map:
-  core: apps/core
+  core: services/api
 steps:
   - name: t
     run: true

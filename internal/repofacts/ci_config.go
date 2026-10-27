@@ -164,7 +164,7 @@ func dedupeTools(in []string) []string {
 }
 
 // scopeName derives a stable scope identifier from a module path.
-// "apps/core" → "core", "" → the language name.
+// "services/api" → "api", "" → the language name.
 func scopeName(path, lang string) string {
 	if path == "" || path == "." {
 		return lang

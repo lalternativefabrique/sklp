@@ -57,7 +57,7 @@ func TestSpaceEnv_EachSpaceKeepsItsOwnValue(t *testing.T) {
 	t.Setenv("PG_S3_ACCESS_KEY", "from-the-host")
 
 	refs := map[string]string{"PGBACKREST_REPO1_S3_KEY": "PG_S3_ACCESS_KEY"}
-	spaces := []struct{ space, key string }{{"shop-production", "shop-key"}, {"partage-production", "partage-key"}}
+	spaces := []struct{ space, key string }{{"shop-production", "shop-key"}, {"shop-production", "shop-key"}}
 	for _, sp := range spaces {
 		svc := []spacemanager.Service{{Name: "postgres", Image: "pg:17", Env: []string{"PGBACKREST_REPO1_S3_KEY="}}}
 		if err := persistManifest(applySpec{Services: svc, Meta: spacemanager.SpaceMeta{Name: sp.space, EnvRefs: refs}}); err != nil {

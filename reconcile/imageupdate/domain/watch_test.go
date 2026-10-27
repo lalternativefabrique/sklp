@@ -8,7 +8,7 @@ import (
 
 func validWatch(t *testing.T) *Watch {
 	t.Helper()
-	w, err := NewWatch("stack-1", "altfab-www", "rg.fr-par.scw.cloud/altfab/www",
+	w, err := NewWatch("stack-1", "acme-www", "registry.example.com/acme/www",
 		"", "www", "https://141.95.197.144:6464", "", "tok", "ab12")
 	if err != nil {
 		t.Fatalf("NewWatch: %v", err)
@@ -122,7 +122,7 @@ func TestNewerTagFirstRoll(t *testing.T) {
 
 func TestImageRef(t *testing.T) {
 	w := validWatch(t)
-	if got := w.ImageRef("20260820-1349-bff7534"); got != "rg.fr-par.scw.cloud/altfab/www:20260820-1349-bff7534" {
+	if got := w.ImageRef("20260820-1349-bff7534"); got != "registry.example.com/acme/www:20260820-1349-bff7534" {
 		t.Fatalf("ImageRef = %q", got)
 	}
 }

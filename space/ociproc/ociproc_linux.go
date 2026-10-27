@@ -39,7 +39,7 @@ import (
 // the child ran fine and its work is already done. Left unhandled this isn't
 // just a false failure: os/exec's pidfd-based Wait can then block forever
 // waiting on an event that will never come, hanging the caller. See
-// apps/sklp/space/spacenet/subid.go's runMapHelper, which fixed the same race
+// space/spacenet/subid.go's runMapHelper, which fixed the same race
 // for newuidmap/newgidmap; this is the same fix for runc/slirp4netns, the
 // other two children this supervisor launches directly with os/exec.
 //

@@ -272,7 +272,7 @@ func (c *Client) Apply(ctx context.Context, specJSON []byte) (ApplyResult, error
 
 // ApplyForce is Apply with the cross-stack ownership guard's escape hatch:
 // the server adopts a space already owned by a different stack instead of
-// refusing (see handleApply's guard, apps/sklp/spacemanager/control/apply_linux.go).
+// refusing (see handleApply's guard, spacemanager/control/apply_linux.go).
 func (c *Client) ApplyForce(ctx context.Context, specJSON []byte) (ApplyResult, error) {
 	return c.applyWithForce(ctx, specJSON, true)
 }

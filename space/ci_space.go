@@ -135,8 +135,8 @@ func runViaSpace(ctx context.Context, cfg Config) (string, error) {
 		if svc.Run != "" {
 			// Image-less shell service: the project itself, run on the built space
 			// rootfs (baked toolchain) with the checkout at /workspace and the same
-			// writable caches the runner gets, or `cd apps/core && go run .` finds
-			// no apps/core. The run: command is used verbatim — it addresses
+			// writable caches the runner gets, or `cd services/api && go run .` finds
+			// no services/api. The run: command is used verbatim — it addresses
 			// upstreams as <name>:<port>.
 			ds.Image = ""
 			ds.RootfsDir = runnerRootfs

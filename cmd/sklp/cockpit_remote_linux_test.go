@@ -41,7 +41,7 @@ func TestReadNodeHappyPath(t *testing.T) {
 	defer srv.Close()
 
 	sum := sha256.Sum256(srv.Certificate().Raw)
-	node := readNode(context.Background(), "altfab-vm", config.Context{
+	node := readNode(context.Background(), "acme-vm", config.Context{
 		Server:        srv.URL,
 		Token:         token,
 		CAFingerprint: hex.EncodeToString(sum[:]),
@@ -97,7 +97,7 @@ func TestLogClientReachesEverySpaceOfANode(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	node := multiSpaceNode(t)
-	cfg.SetContext("altfab-vm", config.Context{
+	cfg.SetContext("acme-vm", config.Context{
 		Server: node.URL, Token: "tok", Space: "production", CAFingerprint: certFingerprint(node),
 	})
 	if err := cfg.Save(path); err != nil {
@@ -105,7 +105,7 @@ func TestLogClientReachesEverySpaceOfANode(t *testing.T) {
 	}
 
 	for _, space := range []string{"production", "shop-production"} {
-		client, err := logClient("altfab-vm", space)
+		client, err := logClient("acme-vm", space)
 		if err != nil {
 			t.Fatalf("logClient(%q): %v", space, err)
 		}

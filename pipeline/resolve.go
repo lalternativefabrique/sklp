@@ -330,7 +330,7 @@ func serviceName(stepName string) string {
 }
 
 // pathMatches treats a service_map entry ending with "/" as a directory
-// prefix (`apps/core/` matches `apps/core/main.go`), and entries without a
+// prefix (`services/api/` matches `services/api/main.go`), and entries without a
 // trailing slash as exact filename matches anchored at the repo root
 // (`Makefile` matches the root `Makefile` but not `apps/web/Makefile`).
 //

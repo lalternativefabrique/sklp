@@ -32,9 +32,9 @@ func StackOf(manifestPath string) string {
 
 // ApplyResult is Skalpai's own mirror of the node's POST /v1/apply response
 // (spacemanager/control.ApplyResult) — kept separate rather than imported so
-// this package never needs the embedded_runtime build tag apps/sklp carries
+// this package never needs the embedded_runtime build tag the sklp binaries carry
 // (same reasoning as gatewaydomain.NodeState mirroring control.ServiceState;
-// see apps/core/gateway/domain/state.go's package doc).
+// see the server's gateway domain).
 type ApplyResult struct {
 	Result   string
 	Changes  []string
@@ -46,7 +46,7 @@ type ApplyResult struct {
 // legacy single-space node). One call handles both a first-ever deploy
 // (space does not exist yet) and a re-apply (drift detected): the node's
 // handler is create-or-update, idempotent — see issue 206ec5bd's transport
-// research, apps/sklp/spacemanager/control/apply_linux.go's handleApply.
+// research, spacemanager/control/apply_linux.go's handleApply.
 type Applier interface {
 	Apply(ctx context.Context, target NodeTarget, m *Manifest) (ApplyResult, error)
 }

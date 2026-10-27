@@ -12,13 +12,13 @@ func osWriteFile(path string, b []byte) error {
 }
 
 func TestSuggestDevServices_GoApiAndPnpmWeb(t *testing.T) {
-	// Mirrors the skalpai layout: one Go module under apps/core, one
+	// Mirrors a monorepo layout: one Go module under services/api, one
 	// pnpm workspace under apps/web. Both already pre-classified as
 	// IsApp=true to bypass the runnable scanner (tested separately).
 	runnables := []RunnableFacts{
 		{
 			Lang:       "go",
-			Module:     ModuleFacts{Path: "apps/core", Name: "github.com/x/skalpai/apps/core", Manifest: "go.mod"},
+			Module:     ModuleFacts{Path: "services/api", Name: "github.com/x/skalpai/services/api", Manifest: "go.mod"},
 			IsApp:      true,
 			Reason:     "has main package at module root",
 			Entrypoint: "go run .",
@@ -41,12 +41,12 @@ func TestSuggestDevServices_GoApiAndPnpmWeb(t *testing.T) {
 	for _, s := range got {
 		byName[s.Name] = s
 	}
-	api, ok := byName["core"]
+	api, ok := byName["api"]
 	if !ok {
-		t.Fatalf("missing core service: %+v", got)
+		t.Fatalf("missing api service: %+v", got)
 	}
-	if api.Run != "go run ." || api.Workdir != "apps/core" {
-		t.Errorf("unexpected core: %+v", api)
+	if api.Run != "go run ." || api.Workdir != "services/api" {
+		t.Errorf("unexpected api: %+v", api)
 	}
 	web, ok := byName["web"]
 	if !ok {
@@ -55,8 +55,8 @@ func TestSuggestDevServices_GoApiAndPnpmWeb(t *testing.T) {
 	if web.Run != "pnpm --filter @skalpai/web dev" {
 		t.Errorf("unexpected web run: %q", web.Run)
 	}
-	if len(web.DependsOn) != 1 || web.DependsOn[0] != "core" {
-		t.Errorf("web should depend on core, got %v", web.DependsOn)
+	if len(web.DependsOn) != 1 || web.DependsOn[0] != "api" {
+		t.Errorf("web should depend on api, got %v", web.DependsOn)
 	}
 }
 

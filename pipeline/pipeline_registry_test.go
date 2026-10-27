@@ -19,9 +19,9 @@ func loaderWith(hosts map[string]registry.Credential) registryLoader {
 
 func TestPushHostsSkipsNonPushingSteps(t *testing.T) {
 	p := Pipeline{Steps: []Step{
-		{Name: "build", Kind: "publish", Image: "rg.fr-par.scw.cloud/skalpai/core:1"},
+		{Name: "build", Kind: "publish", Image: "rg.fr-par.scw.cloud/acme/core:1"},
 		{Name: "local", Kind: "publish", Image: "ghcr.io/x/y:1", Push: boolPtr(false)},
-		{Name: "again", Kind: "publish", Image: "rg.fr-par.scw.cloud/skalpai/web:1"},
+		{Name: "again", Kind: "publish", Image: "rg.fr-par.scw.cloud/acme/web:1"},
 		{Name: "test", Run: "go test ./..."},
 	}}
 	got := pushHosts(p)
@@ -43,7 +43,7 @@ func TestPushHostsDefaultsBareImageToDockerHub(t *testing.T) {
 }
 
 func TestResolveRegistryCredentialsSucceeds(t *testing.T) {
-	p := Pipeline{Steps: []Step{{Name: "p", Kind: "publish", Image: "rg.fr-par.scw.cloud/skalpai/core:1"}}}
+	p := Pipeline{Steps: []Step{{Name: "p", Kind: "publish", Image: "rg.fr-par.scw.cloud/acme/core:1"}}}
 	regs, err := resolveRegistryCredentials(p, loaderWith(map[string]registry.Credential{
 		"rg.fr-par.scw.cloud": {Username: "nologin", Auth: registry.EncodeAuth("nologin", "pw")},
 	}))
@@ -59,7 +59,7 @@ func TestResolveRegistryCredentialsSucceeds(t *testing.T) {
 // the verb that fixes it — not after a push has already spent the build.
 func TestResolveRegistryCredentialsListsEveryMissingHost(t *testing.T) {
 	p := Pipeline{Steps: []Step{
-		{Name: "a", Kind: "publish", Image: "rg.fr-par.scw.cloud/skalpai/core:1"},
+		{Name: "a", Kind: "publish", Image: "rg.fr-par.scw.cloud/acme/core:1"},
 		{Name: "b", Kind: "publish", Image: "ghcr.io/x/y:1"},
 	}}
 	_, err := resolveRegistryCredentials(p, loaderWith(nil))
@@ -134,11 +134,11 @@ func TestPerformRegistryLoginAlwaysLogsInOncePerHost(t *testing.T) {
 
 func TestImageHost(t *testing.T) {
 	cases := map[string]string{
-		"rg.fr-par.scw.cloud/skalpai/core:1": "rg.fr-par.scw.cloud",
-		"ghcr.io/org/app:2":                  "ghcr.io",
-		"localhost:5000/app:3":               "localhost:5000",
-		"org/app:1":                          "",
-		"app":                                "",
+		"rg.fr-par.scw.cloud/acme/core:1": "rg.fr-par.scw.cloud",
+		"ghcr.io/org/app:2":               "ghcr.io",
+		"localhost:5000/app:3":            "localhost:5000",
+		"org/app:1":                       "",
+		"app":                             "",
 	}
 	for in, want := range cases {
 		if got := imageHost(in); got != want {
@@ -152,7 +152,7 @@ func ciPipeline() Pipeline {
 		Registries: map[string]RegistryCredential{
 			"rg.fr-par.scw.cloud": {Username: "nologin", Password: "${SCW_SECRET_KEY}"},
 		},
-		Steps: []Step{{Name: "p", Kind: "publish", Image: "rg.fr-par.scw.cloud/skalpai/core:1"}},
+		Steps: []Step{{Name: "p", Kind: "publish", Image: "rg.fr-par.scw.cloud/acme/core:1"}},
 	}
 }
 
@@ -219,7 +219,7 @@ func TestPushCredentialsDevIgnoresBlock(t *testing.T) {
 
 // In CI the login file is never read, even when it covers the host.
 func TestPushCredentialsCIIgnoresLoginFile(t *testing.T) {
-	p := Pipeline{Steps: []Step{{Name: "p", Kind: "publish", Image: "rg.fr-par.scw.cloud/skalpai/core:1"}}}
+	p := Pipeline{Steps: []Step{{Name: "p", Kind: "publish", Image: "rg.fr-par.scw.cloud/acme/core:1"}}}
 	_, err := resolvePushCredentials(p, true, loaderWith(map[string]registry.Credential{
 		"rg.fr-par.scw.cloud": {Username: "nologin", Auth: registry.EncodeAuth("nologin", "leftover")},
 	}), envWith(nil))

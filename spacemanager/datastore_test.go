@@ -2,17 +2,17 @@ package spacemanager
 
 import "testing"
 
-func lalterLikeSpace() []Service {
+func acmeLikeSpace() []Service {
 	return []Service{
 		{Name: "postgres", Image: "rg.fr-par.scw.cloud/platform-ops/postgres-pgbackrest-pgvector:20260923-0744-052cb8cc8525",
 			Volumes: []string{"pgdata:/var/lib/postgresql/data", "backup:/backup"},
-			Env:     []string{"POSTGRES_USER=app", "PGBACKREST_STANZA=altfab", "PGBACKREST_REPO1_S3_BUCKET=altfab-prod-backups"}},
+			Env:     []string{"POSTGRES_USER=app", "PGBACKREST_STANZA=acme", "PGBACKREST_REPO1_S3_BUCKET=acme-prod-backups"}},
 		{Name: "pgbackrest", Image: "rg.fr-par.scw.cloud/platform-ops/pgbackrest-sidecar-pgvector:20260923-0744-052cb8cc8525",
 			Volumes: []string{"pgdata:/var/lib/postgresql/data"}},
 		{Name: "nats", Image: "nats:2.12-alpine", Volumes: []string{"nats-data:/data"},
 			Backup: &ServiceBackup{Schedule: "15 3 * * *", Command: []string{"sh", "-c", "tar czf … && aws s3 cp …"}}},
-		{Name: "core", Image: "rg.fr-par.scw.cloud/altfab/core:1"},
-		{Name: "migrate", Image: "rg.fr-par.scw.cloud/altfab/migrate:1", Oneshot: true, Volumes: []string{"pgdata:/x"}},
+		{Name: "core", Image: "registry.example.com/acme/core:1"},
+		{Name: "migrate", Image: "registry.example.com/acme/migrate:1", Oneshot: true, Volumes: []string{"pgdata:/x"}},
 	}
 }
 
@@ -24,13 +24,13 @@ func storesByService(stores []DataStore) map[string]DataStore {
 	return m
 }
 
-func TestDataStoresGradesALalterLikeSpace(t *testing.T) {
-	got := storesByService(DataStores(lalterLikeSpace()))
+func TestDataStoresGradesAAcmeLikeSpace(t *testing.T) {
+	got := storesByService(DataStores(acmeLikeSpace()))
 	if len(got) != 2 {
 		t.Fatalf("stores = %v, want postgres and nats only (no sidecar, no job, no stateless service)", got)
 	}
 	pg := got["postgres"]
-	if pg.Engine != EnginePostgres || pg.Protection != ProtectionBacked || pg.Detail != "pgbackrest stanza altfab → s3://altfab-prod-backups" {
+	if pg.Engine != EnginePostgres || pg.Protection != ProtectionBacked || pg.Detail != "pgbackrest stanza acme → s3://acme-prod-backups" {
 		t.Fatalf("postgres = %+v", pg)
 	}
 	nats := got["nats"]
@@ -87,7 +87,7 @@ func TestEngineOfReadsTheRepositoryNotTheRegistry(t *testing.T) {
 func TestDataStoresCountsAScheduledBackupJobAimedAtTheStore(t *testing.T) {
 	space := []Service{
 		{Name: "nats", Image: "nats:2.12-alpine", Volumes: []string{"nats-data:/data"}},
-		{Name: "nats-backup", Image: "rg.fr-par.scw.cloud/skalpai/platform/nats-backup:1", Oneshot: true, Schedule: "45 */6 * * *",
+		{Name: "nats-backup", Image: "registry.example.com/acme/platform/nats-backup:1", Oneshot: true, Schedule: "45 */6 * * *",
 			Env: []string{"NATS_URL=nats://backup:pw@nats:4222"}},
 		{Name: "migrate", Image: "app/migrate:1", Oneshot: true, Schedule: "0 * * * *", Env: []string{"DB=postgres://nats:4222"}},
 	}

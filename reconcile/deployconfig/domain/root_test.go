@@ -10,7 +10,7 @@ const validRoot = `
 kind: deploy-root
 node_id: node-1
 deployments:
-  - space: tornade-production
+  - space: demo-production
     path: .sklp/prod/deploy.yaml
   - space: piper-production
     path: .sklp/prod/piper.yaml
@@ -99,7 +99,7 @@ func TestParseRootTakesNodeNameAsIdentity(t *testing.T) {
 kind: deploy-root
 node: node-a
 deployments:
-  - space: altfab-production
+  - space: acme-production
     path: .sklp/prod/deploy.yaml
   - space: www-production
     path: .sklp/prod/www.yaml

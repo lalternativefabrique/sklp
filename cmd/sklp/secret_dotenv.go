@@ -1,10 +1,10 @@
 // secret_dotenv.go — dotenv parsing/writing for `sklp secret push/pull`.
 //
-// Format mirrors apps/sklp/pipeline/pipeline_envfiles.go's parseDotenvFile
+// Format mirrors pipeline/pipeline_envfiles.go's parseDotenvFile
 // exactly (KEY=value, `#` comments, blank lines, single/double-quote
 // stripping, no ${VAR} expansion) so a file written by `secret pull` stays
 // readable by a pipeline's env_files: block. Duplicated rather than
-// imported: apps/sklp/pipeline is a large, unrelated package, and pull needs
+// imported: pipeline is a large, unrelated package, and pull needs
 // an order/comment-preserving shape that pipeline's parser doesn't provide.
 package main
 

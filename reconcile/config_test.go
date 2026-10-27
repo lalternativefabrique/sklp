@@ -11,10 +11,10 @@ func TestParseConfigReadsTargets(t *testing.T) {
 	cfg, err := ParseConfig([]byte(`
 interval: 30s
 targets:
-  - repo: https://github.com/digstack/shop.git
+  - repo: https://github.com/example-org/shop.git
     branch: main
-  - repo: https://github.com/altfab-org/altfab.git
-    name: altfab
+  - repo: https://github.com/acme-org/acme.git
+    name: acme
 `))
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
@@ -90,10 +90,10 @@ func TestLoadConfigTreatsAMissingFileAsNoTargets(t *testing.T) {
 // clone URL must not survive into it.
 func TestRepoNameDropsCredentials(t *testing.T) {
 	for remote, want := range map[string]string{
-		"https://github.com/digstack/shop.git":            "shop",
-		"https://user:token@github.com/digstack/shop.git": "shop",
-		"git@github.com:altfab-org/altfab.git":            "altfab",
-		"https://example.com/deep/path/widgets":           "widgets",
+		"https://github.com/example-org/shop.git":            "shop",
+		"https://user:token@github.com/example-org/shop.git": "shop",
+		"git@github.com:acme-org/acme.git":                   "acme",
+		"https://example.com/deep/path/widgets":              "widgets",
 	} {
 		got := RepoName(remote)
 		if got != want {

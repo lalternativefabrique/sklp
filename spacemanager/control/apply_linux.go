@@ -71,7 +71,7 @@ func handleApply(space string, sup Supervisor, body io.Reader) (ApplyResult, err
 		return ApplyResult{}, fmt.Errorf("decode spec: %w", err)
 	}
 	// Cross-stack ownership guard: mirrors sklet's local TryReapply
-	// (apps/sklp/sklet/reapply.go), which only ever ran on the Unix-socket
+	// (sklet/reapply.go), which only ever ran on the Unix-socket
 	// path. A remote `sklp deploy --server` reached this handler directly and
 	// had no equivalent check, so it silently reconciled away a live space's
 	// services whenever two different stacks happened to target the same

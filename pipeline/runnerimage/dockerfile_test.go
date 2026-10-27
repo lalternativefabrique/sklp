@@ -6,10 +6,10 @@ import (
 	"github.com/lalternativefabrique/sklp/space/host"
 )
 
-// TestRunnerBuildPlan_Synthiz folds the real acme recipe into a plan and
+// TestRunnerBuildPlan_Beta folds the real acme recipe into a plan and
 // asserts the shape: the base, the apt + skt + chmod RUNs, and the ENV/WORKDIR
 // metadata carried separately (not as RUN steps).
-func TestRunnerBuildPlan_Synthiz(t *testing.T) {
+func TestRunnerBuildPlan_Beta(t *testing.T) {
 	r := baseRunner() // go+node, 2 packages, 1 go_tool, GOPRIVATE env
 	plan, err := RunnerBuildPlan(r)
 	if err != nil {

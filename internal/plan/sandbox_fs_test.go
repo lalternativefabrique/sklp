@@ -35,13 +35,13 @@ func TestComputeFSPolicy_Confined(t *testing.T) {
 		CacheDirs: []string{"/home/u/.cache/sklp/tools"},
 		SecretDir: "/run/secrets",
 	}
-	policy := computeFSPolicy(spec, "/home/u/proj/apps/core")
+	policy := computeFSPolicy(spec, "/home/u/proj/services/api")
 	if policy == nil {
 		t.Fatal("confined policy must not be nil")
 	}
 
 	rw := findAccess(policy, "rw")
-	if !containsPath(rw.Paths, "/home/u/proj/apps/core") {
+	if !containsPath(rw.Paths, "/home/u/proj/services/api") {
 		t.Errorf("workdir not rw: %v", rw.Paths)
 	}
 	if !containsPath(rw.Paths, "/tmp") {

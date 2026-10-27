@@ -1,7 +1,6 @@
 // Command gen downloads the pinned OCI helper binaries (runc, slirp4netns)
-// into the embed package dir and verifies each against its pinned sha256.
-// Invoked by `go generate ./apps/sklp/space/embed/`. Binaries are
-// gitignored — they exist only to satisfy //go:embed at build time.
+// into the embed package's bin/ dir and verifies each against its pinned
+// sha256. Invoked by `go generate ./space/embed/`.
 package main
 
 import (
@@ -26,13 +25,14 @@ func main() {
 }
 
 func run() error {
-	// Write next to this package (the //go:embed targets live here), which is
-	// the parent of the gen dir holding this file.
 	_, self, _, ok := runtime.Caller(0)
 	if !ok {
 		return fmt.Errorf("cannot resolve caller path")
 	}
-	dst := filepath.Dir(filepath.Dir(self)) // .../embed/gen -> .../embed
+	dst := filepath.Join(filepath.Dir(filepath.Dir(self)), "bin")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
 
 	for _, a := range meta.Assets {
 		out := filepath.Join(dst, a.Name)

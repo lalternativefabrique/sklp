@@ -45,17 +45,17 @@ func TestSpaceRootOf_WithoutPoolCarvesTheTop(t *testing.T) {
 
 func TestSecondSubIDRange(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "subuid")
-	body := "architect:165536:65536\narchitect:100000:65536\nother:300000:65536\n"
+	body := "alice:165536:65536\nalice:100000:65536\nother:300000:65536\n"
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if b, c := secondSubIDRange(path, "architect", 1001, 165536, 65536); b != 100000 || c != 65536 {
+	if b, c := secondSubIDRange(path, "alice", 1001, 165536, 65536); b != 100000 || c != 65536 {
 		t.Fatalf("second range = %d:%d, want 100000:65536", b, c)
 	}
-	if err := os.WriteFile(path, []byte("architect:165536:65536\narchitect:200000:65536\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("alice:165536:65536\nalice:200000:65536\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, c := secondSubIDRange(path, "architect", 1001, 165536, 65536); c != 0 {
+	if _, c := secondSubIDRange(path, "alice", 1001, 165536, 65536); c != 0 {
 		t.Fatal("an overlapping range must not be taken as the pool")
 	}
 }

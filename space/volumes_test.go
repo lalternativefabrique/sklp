@@ -59,7 +59,7 @@ func TestValidateNamedVolume(t *testing.T) {
 		}
 	}
 	rejected := []string{
-		"/home/architect/.config/sklp/control:/loot:ro",
+		"/home/user/.config/sklp/control:/loot:ro",
 		"/:/host",
 		"/etc/resolv.conf:/etc/resolv.conf:ro",
 		"..:/data",

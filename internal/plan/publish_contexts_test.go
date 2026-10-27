@@ -17,7 +17,7 @@ func TestCompilePublish_BuildContexts_OK(t *testing.T) {
 		Context: ".",
 		BuildContexts: map[string]string{
 			"platform":  "../platform",
-			"schemas":   "docker-image://digstack/schemas:v1.2.0",
+			"schemas":   "docker-image://example-org/schemas:v1.2.0",
 			"api-stage": "target:api",
 		},
 	}

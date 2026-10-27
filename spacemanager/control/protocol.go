@@ -438,7 +438,7 @@ type ApplyRequest struct {
 	Spec json.RawMessage `json:"spec"`
 	// Force adopts a space already owned by a DIFFERENT stack instead of
 	// refusing the apply. Mirrors the local `sklet apply --force` guard
-	// (apps/sklp/sklet/reapply.go TryReapply) on the network path, which had
+	// (sklet/reapply.go TryReapply) on the network path, which had
 	// none: without it, a remote `sklp deploy --server` silently reconciled
 	// away another stack's live services with no error and no confirmation.
 	Force bool `json:"force,omitempty"`

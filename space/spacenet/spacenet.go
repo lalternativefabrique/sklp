@@ -125,7 +125,7 @@ var newSpaceNetMu sync.Mutex
 //
 // The whole function runs under newSpaceNetMu, serialising it across every
 // space on the host. This closes a real race hit when two spaces on one
-// multi-space node (see sklet agent's RunAgent, apps/sklp/sklet/agent.go)
+// multi-space node (see sklet agent's RunAgent, sklet/agent.go)
 // call NewSpaceNet concurrently: reapOrphanWorkers (called at the top of
 // EVERY call, to sweep a prior space's worker leaked by a kill -9) scans
 // /proc for any process carrying the worker env markers whose ppid is 1,

@@ -105,14 +105,14 @@ func mustMarshal(v any) []byte {
 	return b
 }
 
-// serviceNameRE mirrors the shape apps/sklp/spacemanager/control/apply_linux.go
+// serviceNameRE mirrors the shape spacemanager/control/apply_linux.go
 // enforces server-side (serviceNameRE there) — rejecting it here surfaces the
 // error at reconcile time, in Skalpai's own log, instead of as an opaque 4xx
 // from the node's control API.
 var serviceNameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // bracedVar matches the ${VAR} form, mirroring spacemanager's own bracedVar
-// (apps/sklp/spacemanager/config.go) so both parsers reject the same shape.
+// (spacemanager/config.go) so both parsers reject the same shape.
 var bracedVar = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}`)
 
 // ErrSecretsNotSupported is returned when a deploy.yaml references ${VAR} in
@@ -135,7 +135,7 @@ var ErrSecretNotFound = fmt.Errorf("%w: referenced secret was not returned by th
 
 // SecretResolver resolves a project's deploy-readable secrets — the
 // domain's view of project_secret's resolve_secrets use case
-// (apps/core/project_secret/application/resolve_secrets), called in-process
+// (the server's project_secret resolver), called in-process
 // rather than over HTTP (both bounded contexts run in the same core
 // binary — see reconcile_deploy/handler.go's doc on why no PAT is needed).
 // Returns {name: plaintext} for every secret the project has opted into
@@ -384,7 +384,7 @@ func ParseManifestWith(ctx context.Context, raw []byte, opts ParseOptions) (*Man
 
 // envSlice converts a YAML env map into the sorted KEY=value slice
 // spacemanager.Service.Env expects — mirrors spacemanager's own envSlice
-// (apps/sklp/spacemanager/config.go) so the two parsers agree on shape, and
+// (spacemanager/config.go) so the two parsers agree on shape, and
 // so ManifestService's hash is deterministic across reconcile runs.
 func envSlice(m map[string]string) []string {
 	if len(m) == 0 {

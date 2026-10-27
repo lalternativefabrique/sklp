@@ -29,7 +29,7 @@ func TestSelectPipelines(t *testing.T) {
 kind: pipeline
 name: ci-core
 scopes:
-  core: ["apps/core/**"]
+  core: ["services/api/**"]
 steps:
   - name: test
     run: go test ./...
@@ -55,7 +55,7 @@ steps:
 	writePipeline(t, dir, "_base", `version: 1
 kind: pipeline
 scopes:
-  core: ["apps/core/**"]
+  core: ["services/api/**"]
 steps:
   - name: x
     run: echo x
@@ -66,9 +66,9 @@ steps:
 		changed []string
 		want    []string
 	}{
-		{"single match", []string{"apps/core/main.go"}, []string{"ci-core"}},
+		{"single match", []string{"services/api/main.go"}, []string{"ci-core"}},
 		{"no match", []string{"docs/readme.md"}, nil},
-		{"multiple match sorted", []string{"apps/web/app.tsx", "apps/core/x.go"}, []string{"ci-core", "ci-web"}},
+		{"multiple match sorted", []string{"apps/web/app.tsx", "services/api/x.go"}, []string{"ci-core", "ci-web"}},
 	}
 
 	for _, c := range cases {
@@ -119,12 +119,12 @@ name: secops
 require:
   branches: [main]
 scopes:
-  core: ["apps/core/**"]
+  core: ["services/api/**"]
 steps:
   - name: scan
     run: echo scan
 `)
-	changed := []string{"apps/core/main.go"}
+	changed := []string{"services/api/main.go"}
 
 	onFeature, err := SelectPipelines(dir, "feat/x", changed)
 	if err != nil {
@@ -153,12 +153,12 @@ name: ci
 on:
   except: [main]
 scopes:
-  core: ["apps/core/**"]
+  core: ["services/api/**"]
 steps:
   - name: test
     run: echo test
 `)
-	changed := []string{"apps/core/main.go"}
+	changed := []string{"services/api/main.go"}
 
 	onFeature, err := SelectPipelines(dir, "feat/x", changed)
 	if err != nil {
@@ -191,12 +191,12 @@ on:
 require:
   branches: [main]
 scopes:
-  core: ["apps/core/**"]
+  core: ["services/api/**"]
 steps:
   - name: image
     run: echo build
 `)
-	changed := []string{"apps/core/main.go"}
+	changed := []string{"services/api/main.go"}
 
 	for _, branch := range []string{"main", "feat/x", ""} {
 		got, err := SelectPipelines(dir, branch, changed)
@@ -217,12 +217,12 @@ func TestSelectPipelinesWithoutOnBlockIsUnrestricted(t *testing.T) {
 kind: pipeline
 name: ci
 scopes:
-  core: ["apps/core/**"]
+  core: ["services/api/**"]
 steps:
   - name: test
     run: echo test
 `)
-	changed := []string{"apps/core/main.go"}
+	changed := []string{"services/api/main.go"}
 
 	for _, branch := range []string{"main", "feat/x"} {
 		got, err := SelectPipelines(dir, branch, changed)

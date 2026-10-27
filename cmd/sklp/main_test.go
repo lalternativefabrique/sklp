@@ -4,8 +4,7 @@ import "testing"
 
 // TestWillSelfClone covers the flag shapes runRunVerb has to recognise
 // before deciding whether to skip the early task-file existence check.
-// The k8s spawner builds argv via apps/core/ci/infrastructure/
-// spawner_k8s.go:buildRunnerArgs, which uses the space-separated form
+// The server's k8s spawner builds argv with the space-separated form
 // (`-repo-url <url>`); the equals form is supported because Go's `flag`
 // package accepts it and a hand-written invocation may use either.
 func TestWillSelfClone(t *testing.T) {

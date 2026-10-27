@@ -6,15 +6,15 @@ import (
 )
 
 func TestResolveImage(t *testing.T) {
-	s := &OCISpawner{Image: "rg.fr-par.scw.cloud/skalpai/sklp-runner-base:abc"}
+	s := &OCISpawner{Image: "registry.example.com/acme/sklp-runner-base:abc"}
 	cases := []struct {
 		kind, want string
 		wantErr    bool
 	}{
-		{"", "rg.fr-par.scw.cloud/skalpai/sklp-runner-base:abc", false},
-		{"base", "rg.fr-par.scw.cloud/skalpai/sklp-runner-base:abc", false},
-		{"ops", "rg.fr-par.scw.cloud/skalpai/sklp-runner-ops:abc", false},
-		{"rg.fr-par.scw.cloud/skalpai/custom:1", "rg.fr-par.scw.cloud/skalpai/custom:1", false},
+		{"", "registry.example.com/acme/sklp-runner-base:abc", false},
+		{"base", "registry.example.com/acme/sklp-runner-base:abc", false},
+		{"ops", "registry.example.com/acme/sklp-runner-ops:abc", false},
+		{"registry.example.com/acme/custom:1", "registry.example.com/acme/custom:1", false},
 		{"docker.io/evil:latest", "", true},
 	}
 	for _, c := range cases {

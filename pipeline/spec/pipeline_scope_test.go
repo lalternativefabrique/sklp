@@ -24,7 +24,7 @@ func TestScopeMatches_EmptyChanged(t *testing.T) {
 	// don't flip the default.
 	got, err := ScopeMatches(
 		[]string{"backend"},
-		map[string][]string{"backend": {"apps/core/**"}},
+		map[string][]string{"backend": {"services/api/**"}},
 		nil,
 	)
 	if err != nil {
@@ -37,7 +37,7 @@ func TestScopeMatches_EmptyChanged(t *testing.T) {
 
 func TestScopeMatches_HitMiss(t *testing.T) {
 	defs := map[string][]string{
-		"backend":  {"apps/core/**", "packages/sdk-go/**"},
+		"backend":  {"services/api/**", "packages/sdk-go/**"},
 		"frontend": {"apps/web/**"},
 	}
 
@@ -47,13 +47,13 @@ func TestScopeMatches_HitMiss(t *testing.T) {
 		changed    []string
 		want       bool
 	}{
-		{"backend hit on apps/core", []string{"backend"}, []string{"apps/core/api/handler.go"}, true},
+		{"backend hit on services/api", []string{"backend"}, []string{"services/api/api/handler.go"}, true},
 		{"backend hit on sdk-go", []string{"backend"}, []string{"packages/sdk-go/client.go"}, true},
 		{"backend miss on web change", []string{"backend"}, []string{"apps/web/App.tsx"}, false},
 		{"frontend hit", []string{"frontend"}, []string{"apps/web/App.tsx"}, true},
 		{"OR: hit via second scope", []string{"backend", "frontend"}, []string{"apps/web/App.tsx"}, true},
 		{"OR: miss on both", []string{"backend", "frontend"}, []string{"docs/index.md"}, false},
-		{"mixed changes, hit on one", []string{"backend"}, []string{"docs/x.md", "apps/core/x.go"}, true},
+		{"mixed changes, hit on one", []string{"backend"}, []string{"docs/x.md", "services/api/x.go"}, true},
 	}
 	for _, c := range cases {
 		got, err := ScopeMatches(c.stepScopes, defs, c.changed)
@@ -70,8 +70,8 @@ func TestScopeMatches_HitMiss(t *testing.T) {
 func TestScopeMatches_UnknownScopeErrors(t *testing.T) {
 	_, err := ScopeMatches(
 		[]string{"typo"},
-		map[string][]string{"backend": {"apps/core/**"}},
-		[]string{"apps/core/x.go"},
+		map[string][]string{"backend": {"services/api/**"}},
+		[]string{"services/api/x.go"},
 	)
 	if err == nil {
 		t.Fatal("expected error for undeclared scope, got nil")
@@ -144,7 +144,7 @@ func TestChangedFiles_DetectsModifications(t *testing.T) {
 		}
 	}
 
-	mkfile("apps/core/x.go", "x")
+	mkfile("services/api/x.go", "x")
 	mkfile("apps/web/y.tsx", "y")
 	gitCmd("add", "-A")
 	gitCmd("commit", "-m", "feat: two files")
@@ -154,7 +154,7 @@ func TestChangedFiles_DetectsModifications(t *testing.T) {
 	for _, f := range got {
 		have[f] = true
 	}
-	if !have["apps/core/x.go"] || !have["apps/web/y.tsx"] {
+	if !have["services/api/x.go"] || !have["apps/web/y.tsx"] {
 		t.Errorf("expected both files, got %v", got)
 	}
 }

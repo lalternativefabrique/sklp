@@ -106,7 +106,7 @@ func TestGatewayRoutes_InvalidFQDN_Errors(t *testing.T) {
 	cases := map[string]string{
 		"empty":       "",
 		"leading dot": ".api.example.com",
-		"bad chars":   "api_synthiz.app",
+		"bad chars":   "api_beta.app",
 		"too long":    strings.Repeat("a", 64) + ".acme.app",
 	}
 	for name, host := range cases {

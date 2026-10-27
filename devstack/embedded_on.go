@@ -133,7 +133,7 @@ func (b *embeddedBackend) StartService(ctx context.Context, spec DevServiceSpec)
 		// OPT-IN host bind, dev only: the container writes to the repo as the
 		// mapped host uid (uid 0 -> operator), never root. cwd = the mount +
 		// the service's workdir so `go run .` / `pnpm dev` run in the right
-		// subdir (e.g. apps/core), not the repo root.
+		// subdir (e.g. services/api), not the repo root.
 		ds.DevMounts = []space.DevMount{{Source: spec.HostRepo, Destination: spec.RepoMount}}
 		ds.WorkdirOverride = containerWorkdir(spec)
 	}

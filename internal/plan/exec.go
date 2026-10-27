@@ -475,8 +475,8 @@ func runPreflight(ctx context.Context, pf PreflightStep, cfg ExecConfig, allow a
 //
 // cwd is the working directory relative to repo (empty means the
 // repo root). Used to honour PreflightStep.Cwd / ServiceSteps.Cwd
-// so contracts like `cd apps/core && govulncheck ./...` compile to
-// (cwd="apps/core", commands=["govulncheck ./..."]).
+// so contracts like `cd services/api && govulncheck ./...` compile to
+// (cwd="services/api", commands=["govulncheck ./..."]).
 func runShellCommand(ctx context.Context, line, repo, cwd string, allow allowSets, timeout time.Duration, onLine func(stream, command, line string)) (int, string, string, error) {
 	tokens := strings.Fields(line)
 	if len(tokens) == 0 {

@@ -17,7 +17,7 @@ import (
 	"github.com/lalternativefabrique/sklp/internal/cli"
 )
 
-// runDTO mirrors ci.RunDTO (apps/core/ci/dto.go). Unknown fields tolerated.
+// runDTO mirrors ci.RunDTO (the server's ci.RunDTO). Unknown fields tolerated.
 type runDTO struct {
 	ID          string     `json:"id"`
 	ProjectID   string     `json:"project_id"`

@@ -34,7 +34,7 @@ import (
 // the outer spawn package.
 type Config struct {
 	// Image is the OCI reference to pull and run, e.g.
-	// "rg.fr-par.scw.cloud/skalpai/sklp-runner-base:latest".
+	// "registry.example.com/acme/sklp-runner-base:latest".
 	Image string
 
 	// RepoPath is the absolute host path bind-mounted at /workspace

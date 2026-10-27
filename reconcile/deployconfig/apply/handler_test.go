@@ -177,7 +177,7 @@ func testNode() *NodeAddress {
 const validYAML = `
 services:
   api:
-    image: rg.fr-par.scw.cloud/skalpai/api:20260828-0900-abc
+    image: registry.example.com/acme/api:20260828-0900-abc
     port: 8080
 `
 
@@ -490,7 +490,7 @@ func TestHandleAppliesEveryDeploymentTheRootDeclares(t *testing.T) {
 kind: deploy-root
 node_id: node-1
 deployments:
-  - space: tornade-production
+  - space: demo-production
     path: .sklp/prod/deploy.yaml
   - space: piper-production
     path: .sklp/prod/piper.yaml
@@ -515,7 +515,7 @@ deployments:
 	for _, d := range repo.saved {
 		spaces[d.Space] = true
 	}
-	if !spaces["tornade-production"] || !spaces["piper-production"] {
+	if !spaces["demo-production"] || !spaces["piper-production"] {
 		t.Fatalf("saved spaces = %v, want both declared spaces", spaces)
 	}
 }
@@ -673,8 +673,8 @@ func TestHandleSkipsNodeWithNoCredential(t *testing.T) {
 
 // Two repos of one stack conventionally declare the same manifest path
 // (.sklp/prod/deploy.yaml). Keyed by that path they shared one row, so every
-// push rewrote whichever app had won the previous one — altfab, shop and
-// partage took turns owning a single deployment in production. The space is
+// push rewrote whichever app had won the previous one — acme, shop and
+// shop took turns owning a single deployment in production. The space is
 // what is actually deployed, and it stays distinct.
 func TestHandleKeepsOneDeploymentPerSpaceAcrossRepos(t *testing.T) {
 	shop, err := domain.NewDeployment("s1", manifestPath, "node-b", "", "shop-production")
@@ -689,21 +689,21 @@ func TestHandleKeepsOneDeploymentPerSpaceAcrossRepos(t *testing.T) {
 kind: deploy-root
 node: node-b
 deployments:
-  - space: altfab-production
+  - space: acme-production
     path: ` + manifestPath + `
 `
 	fetcher := pathFetcher{files: map[string]string{domain.RootPath: root, manifestPath: validYAML}}
 	applier := &stubApplier{result: domain.ApplyResult{Result: "created"}}
 	h := New(repo, fetcher, stubNodes{node: testNode()}, staticDecrypter{token: "s3cret"}, applier, newStubState(), nil)
 
-	if err := h.Handle(context.Background(), Command{StackID: "s1", Repo: "acme/altfab", Ref: "abc"}); err != nil {
+	if err := h.Handle(context.Background(), Command{StackID: "s1", Repo: "acme/acme", Ref: "abc"}); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
 	if len(repo.saved) != 1 {
 		t.Fatalf("saved = %d, want 1: a new space is its own deployment", len(repo.saved))
 	}
-	if repo.saved[0].Space != "altfab-production" {
-		t.Errorf("saved space = %q, want altfab-production", repo.saved[0].Space)
+	if repo.saved[0].Space != "acme-production" {
+		t.Errorf("saved space = %q, want acme-production", repo.saved[0].Space)
 	}
 	if len(repo.updated) != 0 {
 		t.Errorf("updated = %d, want 0: the other repo's space must not be rewritten", len(repo.updated))
@@ -725,7 +725,7 @@ func TestHandleRecordsAFailureThatHappensBeforeTheApply(t *testing.T) {
 	manifest := `
 services:
   api:
-    image: rg.fr-par.scw.cloud/skalpai/api:20260828-0900-abc
+    image: registry.example.com/acme/api:20260828-0900-abc
     port: 8080
     env:
       TOKEN: ${MISSING}

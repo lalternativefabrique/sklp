@@ -8,7 +8,7 @@ func TestLastKnownRoundTrips(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	peers := []Peer{
-		{ID: "a", PubKey: "pk-a", PrivateIP: "10.90.0.2", Endpoint: "10.70.0.10:51820"},
+		{ID: "a", PubKey: "pk-a", PrivateIP: "10.90.0.2", Endpoint: "10.200.0.10:51820"},
 		{ID: "b", PubKey: "pk-b", PrivateIP: "10.90.0.3"},
 	}
 	if err := saveLastKnown("10.90.0.2", peers); err != nil {

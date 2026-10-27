@@ -10,7 +10,7 @@ import (
 const validDeployYAML = `
 services:
   api:
-    image: rg.fr-par.scw.cloud/skalpai/api:20260828-0900-abc
+    image: registry.example.com/acme/api:20260828-0900-abc
     port: 8080
     replicas: 2
     env:
@@ -49,7 +49,7 @@ func TestParseManifestValid(t *testing.T) {
 		t.Fatalf("services = %d, want 1", len(m.Services))
 	}
 	s := m.Services[0]
-	if s.Name != "api" || s.Image != "rg.fr-par.scw.cloud/skalpai/api:20260828-0900-abc" || s.Port != 8080 || s.Replicas != 2 {
+	if s.Name != "api" || s.Image != "registry.example.com/acme/api:20260828-0900-abc" || s.Port != 8080 || s.Replicas != 2 {
 		t.Fatalf("unexpected service: %+v", s)
 	}
 	if len(s.Env) != 1 || s.Env[0] != "LOG_LEVEL=info" {
@@ -105,7 +105,7 @@ func TestParseManifestRequiresImage(t *testing.T) {
 }
 
 // TestParseManifestRejectsInvalidServiceName mirrors the node's own
-// serviceNameRE (apps/sklp/spacemanager/control/apply_linux.go) — rejecting
+// serviceNameRE (spacemanager/control/apply_linux.go) — rejecting
 // it here surfaces the error in Skalpai's log instead of an opaque 4xx from
 // the node.
 func TestParseManifestRejectsInvalidServiceName(t *testing.T) {
@@ -414,14 +414,14 @@ services:
   core:
     image: img:tag
     env:
-      LALTER_HOST: ${LALTER_HOST}
+      ACME_HOST: ${ACME_HOST}
 `
 	m, err := ParseManifestWithConfig(context.Background(), []byte(raw),
-		map[string]string{"LALTER_HOST": "altfab.fr"}, nil, "proj-1", "user-1")
+		map[string]string{"ACME_HOST": "acme.example"}, nil, "proj-1", "user-1")
 	if err != nil {
 		t.Fatalf("ParseManifestWithConfig: %v", err)
 	}
-	if got := m.Services[0].Env[0]; got != "LALTER_HOST=altfab.fr" {
+	if got := m.Services[0].Env[0]; got != "ACME_HOST=acme.example" {
 		t.Fatalf("env = %q, want the plain value substituted", got)
 	}
 }

@@ -26,7 +26,7 @@ import (
 
 // EnvControllerIP is the env var the host process sets (sklet.RunAgent) and
 // the re-exec'd worker reads (hostUpstreams, dns.go) so a Space's DNS
-// forwards .internal queries to the controller. Exported: apps/sklp/space's
+// forwards .internal queries to the controller. Exported: space's
 // deploynet_linux.go (a sibling package) reads the same variable when
 // building the /32 egress exception, so both call sites share one name.
 const EnvControllerIP = "SKLP_CONTROLLER_IP"

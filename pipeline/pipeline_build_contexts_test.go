@@ -30,8 +30,8 @@ func TestLocalDirBuildContext_RecognisesPaths(t *testing.T) {
 // via the spec's JSON marshalling).
 func TestLocalDirBuildContext_SkipsRemoteSchemes(t *testing.T) {
 	cases := []string{
-		"docker-image://digstack/schemas:v1.2.0",
-		"docker-image://digstack/schemas@sha256:abc",
+		"docker-image://example-org/schemas:v1.2.0",
+		"docker-image://example-org/schemas@sha256:abc",
 		"oci-layout:///var/tmp/layout",
 		"target:api",
 		"https://github.com/foo/bar.git#v1.0",

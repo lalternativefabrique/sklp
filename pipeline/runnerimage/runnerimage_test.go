@@ -10,7 +10,7 @@ func TestRenderDockerfile(t *testing.T) {
 		Toolchain: map[string]string{"go": "1.25.0", "node": "24.16.0"},
 		Packages:  []string{"git", "ca-certificates"},
 		GoTools:   []string{"github.com/swaggo/swag/cmd/swag@v1.16.6"},
-		Env:       map[string]string{"GOPRIVATE": "github.com/digstack"},
+		Env:       map[string]string{"GOPRIVATE": "github.com/example-org"},
 		Secrets:   []string{"GITHUB_TOKEN"},
 	}
 	df, err := renderDockerfile(r)
@@ -49,7 +49,7 @@ func TestRenderDockerfile(t *testing.T) {
 
 func TestRenderFromBase(t *testing.T) {
 	r := Runner{
-		BaseImage: "rg.fr-par.scw.cloud/skalpai/sklp-runner-base:latest",
+		BaseImage: "registry.example.com/acme/sklp-runner-base:latest",
 		Toolchain: map[string]string{"php": "8.3", "node": "22"},
 		Packages:  []string{"imagemagick"},
 		GoTools:   []string{"honnef.co/go/tools/cmd/staticcheck@latest"},
@@ -61,7 +61,7 @@ func TestRenderFromBase(t *testing.T) {
 	}
 	// from-base: FROM the base, layer toolchain — NO source compilation.
 	for _, want := range []string{
-		"FROM rg.fr-par.scw.cloud/skalpai/sklp-runner-base:latest",
+		"FROM registry.example.com/acme/sklp-runner-base:latest",
 		"skt install php@8.3 --cache-dir /opt/sklp/tools --json",
 		"skt install node@22 --cache-dir /opt/sklp/tools --json",
 		"apt-get install -y --no-install-recommends nftables iproute2 uidmap util-linux git ca-certificates curl xz-utils udhcpc e2fsprogs imagemagick",
@@ -86,8 +86,8 @@ func TestRenderFromBase(t *testing.T) {
 	}
 	// Critically: NO repo COPY, NO sklp recompilation, NO mise.
 	for _, forbidden := range []string{
-		"COPY apps/sklp",
-		"COPY go.work",
+		"COPY go.mod",
+		"COPY . .",
 		"AS sklp-build",
 		"AS skt-build",
 		"go build -o /out/sklp",

@@ -110,7 +110,7 @@ func TestKVRepositoryKeepsOneDeploymentPerSpace(t *testing.T) {
 	ctx := context.Background()
 	r := NewKVRepository(testKV(t))
 
-	for _, space := range []string{"shop-production", "altfab-production", "partage-production"} {
+	for _, space := range []string{"shop-production", "acme-production", "demo-production"} {
 		if err := r.Save(ctx, deployment(t, "s1", space)); err != nil {
 			t.Fatalf("Save %s: %v", space, err)
 		}

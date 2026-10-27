@@ -29,11 +29,11 @@ func agentCommand() cli.Command {
 		Flags: []cli.Flag{
 			{Name: "listen", Type: cli.StringFlag, StringDefault: ":6464", Usage: "TCP address to expose the control API on over TLS + a Bearer token (must NOT be the :9443/:9080 front door)"},
 			{Name: "space", Type: cli.StringFlag, Usage: "ignored; kept so agent units rendered before its removal still start"},
-			{Name: "advertise", Type: cli.StringFlag, Usage: "public host/IP written into the generated node config's server field (e.g. 141.94.106.171); empty leaves server blank for the operator to fill in"},
+			{Name: "advertise", Type: cli.StringFlag, Usage: "public host/IP written into the generated node config's server field (e.g. 203.0.113.10); empty leaves server blank for the operator to fill in"},
 			{Name: "gateway-mode", Type: cli.StringFlag, Usage: "REQUIRED: front door for this node: per-space (native mux on :9080/:9443) or singleton (legacy traefik). No default — the mode is a node-level decision, never inferred from a deploy.yaml"},
 			{Name: "mesh-authority-url", Type: cli.StringFlag, Usage: "meshauthority base URL (e.g. https://mesh.internal:4300); empty disables the cross-VM WireGuard mesh (ADR-006)"},
 			{Name: "mesh-authority-url-internal", Type: cli.StringFlag, Usage: "ignored; kept so agent units rendered before its removal still start"},
-			{Name: "mesh-endpoint", Type: cli.StringFlag, Usage: "this node's own dialable IP:port for the WireGuard mesh (its private cloud interface address + the mesh listen port, e.g. 10.70.0.10:51820); required when --mesh-authority-url is set"},
+			{Name: "mesh-endpoint", Type: cli.StringFlag, Usage: "this node's own dialable IP:port for the WireGuard mesh (its private cloud interface address + the mesh listen port, e.g. 10.200.0.10:51820); required when --mesh-authority-url is set"},
 			{Name: "node-relay-domain", Type: cli.StringFlag, Usage: "on a front: relay any control API connection whose TLS SNI is <node-id>.<domain> to that mesh peer's own control API over the private network, TLS untouched (ADR-019). Needs the mesh and a wildcard DNS record *.<domain> on this node's public IP"},
 			{Name: "advertise-via", Type: cli.StringFlag, Usage: "on a private origin: advertise https://<own mesh node-id>.<domain>:<port> as this node's server, the name the front's --node-relay-domain answers for; ignored when --advertise is set"},
 			{Name: "public-nic-interface", Type: cli.StringFlag, Usage: "public NIC whose policy routing and SMTP egress the node keeps in place (node.yaml public_nic); empty disables it"},

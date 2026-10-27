@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 // working rootless runc, and /etc/subuid delegation — not guaranteed in CI.
 // Run locally with:
 //
-//	SKLP_RUNC_E2E=1 go test -tags 'embedded_runtime linux' -run E2E ./apps/sklp/space/imagebuild/
+//	SKLP_RUNC_E2E=1 go test -tags 'embedded_runtime linux' -run E2E ./space/imagebuild/
 func TestRuncStepRunner_E2E(t *testing.T) {
 	skipUnlessRuncE2E(t)
 

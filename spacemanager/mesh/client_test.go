@@ -23,14 +23,14 @@ func TestClientRegister(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(registerResponse{
-			Peer:  Peer{ID: "self", PubKey: "selfpub", PrivateIP: "10.90.0.2", Endpoint: "10.70.0.10:51820", Spaces: []string{"production"}, Services: []ServiceRef{{Space: "production", Service: "api", Port: 8080}}},
+			Peer:  Peer{ID: "self", PubKey: "selfpub", PrivateIP: "10.90.0.2", Endpoint: "10.200.0.10:51820", Spaces: []string{"production"}, Services: []ServiceRef{{Space: "production", Service: "api", Port: 8080}}},
 			Peers: []Peer{{ID: "self", PubKey: "selfpub", PrivateIP: "10.90.0.2", Spaces: []string{"production"}}, {ID: "peer2", PubKey: "peer2pub", PrivateIP: "10.90.0.3"}},
 		})
 	}))
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "tok", testSignKey(t))
-	self, peers, err := c.Register(context.Background(), "self", "selfpub", "10.70.0.10:51820", []string{"production"}, []ServiceRef{{Space: "production", Service: "api", Port: 8080}})
+	self, peers, err := c.Register(context.Background(), "self", "selfpub", "10.200.0.10:51820", []string{"production"}, []ServiceRef{{Space: "production", Service: "api", Port: 8080}})
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}

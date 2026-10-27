@@ -72,7 +72,7 @@ func rootCommand() cli.Command {
 			},
 			{
 				// Hidden: emits the command tree as JSON, the single source of
-				// truth for the sklp-web documentation site (apps/sklp-web).
+				// truth for the sklp-web documentation site (the sklp-web docs site).
 				Name:   "__doc",
 				Hidden: true,
 				Run: func(ctx context.Context, args cli.Args) int {

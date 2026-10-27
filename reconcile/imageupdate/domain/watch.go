@@ -73,7 +73,7 @@ type Watch struct {
 	Name    string
 
 	// ImageRepo is the full repository reference WITHOUT a tag, e.g.
-	// "rg.fr-par.scw.cloud/altfab/www".
+	// "registry.example.com/acme/www".
 	ImageRepo  string
 	TagPattern string
 

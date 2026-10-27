@@ -80,11 +80,11 @@ func buildRootfs(ctx context.Context, o Options) error {
 // image's /init: it mounts what the runtime needs and serves the vsock
 // protocol the host drives it with.
 func bakeBinaries(ctx context.Context, o Options, stage string) error {
-	sklpBin, err := resolveBinary(ctx, o.SklpBin, "sklp", "./apps/sklp/cmd/sklp", o.Arch, o.Work, true)
+	sklpBin, err := resolveBinary(ctx, o.SklpBin, "sklp", "./cmd/sklp", o.Arch, o.Work, true)
 	if err != nil {
 		return err
 	}
-	agent, err := resolveBinary(ctx, o.AgentBin, "sklp-vzagent", "./apps/sklp/cmd/sklp-vzagent", o.Arch, o.Work, false)
+	agent, err := resolveBinary(ctx, o.AgentBin, "sklp-vzagent", "./cmd/sklp-vzagent", o.Arch, o.Work, false)
 	if err != nil {
 		return err
 	}

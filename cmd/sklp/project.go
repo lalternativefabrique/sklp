@@ -17,7 +17,7 @@ import (
 	"github.com/lalternativefabrique/sklp/internal/cli"
 )
 
-// projectItem mirrors ProjectListItem (apps/core/project/dto.go). Unknown
+// projectItem mirrors ProjectListItem (the server's ProjectListItem DTO). Unknown
 // fields are tolerated — we only map what we render.
 type projectItem struct {
 	ID         string    `json:"id"`

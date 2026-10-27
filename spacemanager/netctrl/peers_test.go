@@ -56,15 +56,15 @@ func TestPeerCache_AContestedServiceResolvesToNothing(t *testing.T) {
 	web := mesh.ServiceRef{Space: "shop-production", Service: "web", Port: 80}
 	pc := NewPeerCache("self-id")
 	pc.Refresh([]mesh.Peer{
-		{ID: "node-a", PrivateIP: "10.90.0.2", Services: []mesh.ServiceRef{web, {Space: "altfab-production", Service: "web", Port: 80}}},
+		{ID: "node-a", PrivateIP: "10.90.0.2", Services: []mesh.ServiceRef{web, {Space: "acme-production", Service: "web", Port: 80}}},
 		{ID: "zzz-intruder", PrivateIP: "10.90.0.9", Services: []mesh.ServiceRef{web}},
-		{ID: "gone", PrivateIP: "10.90.0.7", LastSeenAt: &stale, Services: []mesh.ServiceRef{{Space: "altfab-production", Service: "web", Port: 80}}},
+		{ID: "gone", PrivateIP: "10.90.0.7", LastSeenAt: &stale, Services: []mesh.ServiceRef{{Space: "acme-production", Service: "web", Port: 80}}},
 	})
 
 	if ip, ok := pc.RemoteEndpoint("shop-production", "web"); ok {
 		t.Fatalf("contested service resolved to %s", ip)
 	}
-	if ip, ok := pc.RemoteEndpoint("altfab-production", "web"); !ok || ip != "10.90.0.2" {
+	if ip, ok := pc.RemoteEndpoint("acme-production", "web"); !ok || ip != "10.90.0.2" {
 		t.Fatalf("a stale peer's claim blocked a live one: (%q, %v)", ip, ok)
 	}
 }

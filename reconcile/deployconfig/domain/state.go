@@ -3,7 +3,7 @@ package domain
 import "context"
 
 // ServiceState mirrors sklp's control.ServiceState — same shape as
-// gatewaydomain.ServiceState (apps/core/gateway/domain/state.go), duplicated
+// gatewaydomain.ServiceState (the server's gateway domain), duplicated
 // rather than imported: this context does not depend on gateway/domain
 // beyond NodeRepository (see applier.go's doc), and gateway's own
 // StateFetcher hard-codes the unprefixed /v1/state route, which only ever

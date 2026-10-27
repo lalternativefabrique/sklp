@@ -99,8 +99,8 @@ func TestImageGC_RemovesStaleGenerationKeepsLive(t *testing.T) {
 func TestImageGC_ProtectsAcrossSpaces(t *testing.T) {
 	root := gcFixture(t,
 		map[string][]string{
-			"shop":   {"rg.example.com/core:v2"},
-			"altfab": {"rg.example.com/web:v9"},
+			"shop": {"rg.example.com/core:v2"},
+			"acme": {"rg.example.com/web:v9"},
 		},
 		map[string]string{"rg.example.com/core:v2": "core2", "rg.example.com/web:v9": "web9"},
 		[]string{"core2", "web9"},

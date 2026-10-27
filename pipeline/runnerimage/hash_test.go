@@ -8,7 +8,7 @@ func baseRunner() Runner {
 		Toolchain: map[string]string{"go": "1.25.0", "node": "24.16.0"},
 		Packages:  []string{"git", "curl"},
 		GoTools:   []string{"gotest.tools/gotestsum@v1.13.0"},
-		Env:       map[string]string{"GOPRIVATE": "github.com/digstack"},
+		Env:       map[string]string{"GOPRIVATE": "github.com/example-org"},
 	}
 }
 

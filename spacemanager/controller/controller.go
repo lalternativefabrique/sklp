@@ -89,7 +89,7 @@ type SpaceOptions struct {
 	// manifest (control.RemoveSpaceArtifacts) and cache dir
 	// (space.PurgeSpaceCache) once Shutdown has been called and runSpace has
 	// returned — the same cleanup the LOCAL `sklet apply --down`/Down path
-	// already does (apps/sklp/sklet/down.go), which a remote `sklp deploy
+	// already does (sklet/down.go), which a remote `sklp deploy
 	// delete` (POST /v1/down) never reached: that route only ever cancelled the
 	// context, leaving the manifest behind so a later `apply` with an
 	// unchanged spec reported "unchanged" against a space whose runtime was

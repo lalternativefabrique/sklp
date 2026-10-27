@@ -8,7 +8,7 @@ import (
 
 // RegistryCredential authenticates tag listings for EVERY watch of the stack
 // whose ImageRepo starts with Prefix — one credential per registry namespace
-// (e.g. "rg.fr-par.scw.cloud/altfab") instead of a copy on each watch. A
+// (e.g. "registry.example.com/acme") instead of a copy on each watch. A
 // watch's own RegistrySecret, when set, still wins: it is the explicit
 // override, the shared credential the default.
 type RegistryCredential struct {

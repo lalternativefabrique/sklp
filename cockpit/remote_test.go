@@ -16,16 +16,16 @@ func withRemoteNodes(t *testing.T, nodes []RemoteNode) {
 // node they run on.
 func TestRemoteSpacesAreListed(t *testing.T) {
 	withRemoteNodes(t, []RemoteNode{{
-		Name:   "altfab-vm",
+		Name:   "acme-vm",
 		Target: "https://10.0.0.4:6464",
 		Spaces: []SpaceSummary{{Name: "production", Status: "running", Runc: []ContainerSummary{{ID: "web-0", Status: "running"}}}},
 	}})
 
-	got := loadRemoteSpaces(context.Background(), "altfab-vm")
+	got := loadRemoteSpaces(context.Background(), "acme-vm")
 	if len(got) != 1 {
 		t.Fatalf("want 1 remote space, got %d", len(got))
 	}
-	if got[0].Node != "altfab-vm" || got[0].Name != "production" {
+	if got[0].Node != "acme-vm" || got[0].Name != "production" {
 		t.Fatalf("row not tagged with its node: %+v", got[0])
 	}
 }
@@ -63,12 +63,12 @@ func TestLocalActionsRefuseRemoteSpaces(t *testing.T) {
 			StopSpace = func(string) error { t.Fatal("local stop fired for a remote space"); return nil }
 			t.Cleanup(func() { KillSpace, StopSpace = nil, nil })
 
-			m := &Model{Spaces: []Space{{Name: "production", Node: "altfab-vm", Containers: 1}}}
+			m := &Model{Spaces: []Space{{Name: "production", Node: "acme-vm", Containers: 1}}}
 			m.Update(tc.key)
 			if m.PendingKill != "" {
 				t.Fatalf("a remote space must not arm a local teardown (kill=%q)", m.PendingKill)
 			}
-			if !contains(m.Note, "altfab-vm") {
+			if !contains(m.Note, "acme-vm") {
 				t.Fatalf("note=%q must name the node the space runs on", m.Note)
 			}
 		})
@@ -79,13 +79,13 @@ func TestLocalActionsRefuseRemoteSpaces(t *testing.T) {
 func TestRemoveSpaceKeepsRemoteHomonyms(t *testing.T) {
 	m := &Model{Spaces: []Space{
 		{Name: "production"},
-		{Name: "production", Node: "altfab-vm"},
+		{Name: "production", Node: "acme-vm"},
 	}}
 	m.removeSpace("production")
 	if len(m.Spaces) != 1 {
 		t.Fatalf("want the remote homonym kept, got %+v", m.Spaces)
 	}
-	if m.Spaces[0].Node != "altfab-vm" {
+	if m.Spaces[0].Node != "acme-vm" {
 		t.Fatalf("the wrong row was removed: %+v", m.Spaces[0])
 	}
 }
@@ -96,7 +96,7 @@ func TestPurgeIgnoresRemoteSpaces(t *testing.T) {
 	PurgeSpaces = func() ([]string, error) { t.Fatal("purge fired with no local space"); return nil, nil }
 	t.Cleanup(func() { PurgeSpaces = nil })
 
-	m := &Model{Spaces: []Space{{Name: "production", Node: "altfab-vm", Volumes: []string{"pgdata"}}}}
+	m := &Model{Spaces: []Space{{Name: "production", Node: "acme-vm", Volumes: []string{"pgdata"}}}}
 	if n := m.idleVolumeCount(); n != 0 {
 		t.Fatalf("remote volumes counted in the purge prompt: %d", n)
 	}
@@ -117,7 +117,7 @@ func TestRemoteLogsTargetTheNode(t *testing.T) {
 	t.Cleanup(func() { CILogStream = nil })
 
 	m := &Model{Spaces: []Space{{
-		Name: "production", Node: "altfab-vm", Supervised: true, LimitedInfo: true,
+		Name: "production", Node: "acme-vm", Supervised: true, LimitedInfo: true,
 		Services: []Service{{Name: "web", State: StateReady}},
 	}}}
 	m.ToggleLogs()
@@ -125,7 +125,7 @@ func TestRemoteLogsTargetTheNode(t *testing.T) {
 	if m.LogsCI {
 		t.Fatal("remote logs must not be served from the local CI store")
 	}
-	if m.LogsNode != "altfab-vm" || m.LogsSpace != "production" {
+	if m.LogsNode != "acme-vm" || m.LogsSpace != "production" {
 		t.Fatalf("panel not scoped to the node: node=%q space=%q", m.LogsNode, m.LogsSpace)
 	}
 	if m.LogsService != "web" {
@@ -136,9 +136,9 @@ func TestRemoteLogsTargetTheNode(t *testing.T) {
 // A remote space with no control API cannot be streamed, and the message must
 // name the machine rather than implying a local problem.
 func TestRemoteLogsWithoutControlAPI(t *testing.T) {
-	m := &Model{Spaces: []Space{{Name: "dev-1", Node: "altfab-vm", LimitedInfo: true}}}
+	m := &Model{Spaces: []Space{{Name: "dev-1", Node: "acme-vm", LimitedInfo: true}}}
 	m.ToggleLogs()
-	if !contains(m.LogsErr, "altfab-vm") {
+	if !contains(m.LogsErr, "acme-vm") {
 		t.Fatalf("LogsErr = %q, want it to name the node", m.LogsErr)
 	}
 }

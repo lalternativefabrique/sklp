@@ -226,7 +226,7 @@ func TestLimitedSpacePromotedBySupervisedState(t *testing.T) {
 		},
 		AllReady: true,
 	}
-	sp := limitedSpace("partage-test", info)
+	sp := limitedSpace("shop-test", info)
 	if sp.LimitedInfo {
 		t.Error("LimitedInfo = true, want false: the node served its supervised state")
 	}
@@ -246,7 +246,7 @@ func TestLimitedSpacePromotedBySupervisedState(t *testing.T) {
 
 // Without a supervised answer the row stays container-level, as before.
 func TestLimitedSpaceStaysLimitedWithoutState(t *testing.T) {
-	sp := limitedSpace("partage-test", SpaceSummary{
+	sp := limitedSpace("shop-test", SpaceSummary{
 		Name:       "production",
 		Supervised: true,
 		Runc:       []ContainerSummary{{ID: "sklp-deploy-production-core-0", Status: "running"}},
@@ -263,8 +263,8 @@ func TestExecOnRemoteSpaceArmsWithNode(t *testing.T) {
 	restore := stubSpaceExec(func(string, string, string) error { return nil })
 	defer restore()
 
-	m := &Model{Spaces: []Space{{Name: "altfab-production", Node: "node-b", Services: []Service{
-		{Name: "core", State: StateReady, Container: "sklp-deploy-altfab-production-core-0"},
+	m := &Model{Spaces: []Space{{Name: "acme-production", Node: "node-b", Services: []Service{
+		{Name: "core", State: StateReady, Container: "sklp-deploy-acme-production-core-0"},
 	}}}}
 	m.Level = LevelServices
 	m.Update(KeyExec)

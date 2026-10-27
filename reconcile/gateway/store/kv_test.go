@@ -57,7 +57,7 @@ func testNodeRepo(t *testing.T) *KVNodeRepository {
 
 func newNode(t *testing.T, stack, name string) *domain.Node {
 	t.Helper()
-	n, err := domain.NewNode(stack, name, "https://141.94.156.59:6464", []byte("sealed-token"), "sha256:deadbeef")
+	n, err := domain.NewNode(stack, name, "https://203.0.113.10:6464", []byte("sealed-token"), "sha256:deadbeef")
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestKVNodeRepositoryPreservesTheSealedToken(t *testing.T) {
 	if !bytes.Equal(got.EncryptedToken, []byte("sealed-token")) {
 		t.Fatalf("token = %q, want the bytes that went in", got.EncryptedToken)
 	}
-	if got.CAFingerprint != "sha256:deadbeef" || got.ServerURL != "https://141.94.156.59:6464" {
+	if got.CAFingerprint != "sha256:deadbeef" || got.ServerURL != "https://203.0.113.10:6464" {
 		t.Fatalf("got %+v, want the saved transport", got)
 	}
 }

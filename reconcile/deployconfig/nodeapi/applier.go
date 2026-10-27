@@ -94,7 +94,7 @@ func (a *ControlApplier) Apply(ctx context.Context, target domain.NodeTarget, m 
 }
 
 // applyPath picks /v1/spaces/<space>/apply (multi-space, per
-// apps/sklp/spacemanager/control/protocol.go's SpaceRoutePrefix) when space
+// spacemanager/control/protocol.go's SpaceRoutePrefix) when space
 // is set — the only case Apply's caller ever produces, since
 // domain.Manifest.Space is never empty. The empty-space branch stays as a
 // defensive fallback to the legacy single-space /v1/apply, never exercised

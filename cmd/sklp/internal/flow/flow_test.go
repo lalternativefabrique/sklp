@@ -107,9 +107,9 @@ func TestStartWorktree(t *testing.T) {
 
 func TestParseSlug(t *testing.T) {
 	for _, tc := range []struct{ url, want string }{
-		{"git@github.com:digstack/skalpai.git", "digstack/skalpai"},
-		{"https://github.com/digstack/skalpai.git", "digstack/skalpai"},
-		{"https://github.com/digstack/skalpai", "digstack/skalpai"},
+		{"git@github.com:example-org/app.git", "example-org/app"},
+		{"https://github.com/example-org/app.git", "example-org/app"},
+		{"https://github.com/example-org/app", "example-org/app"},
 		{"  git@github.com:o/r.git\n", "o/r"},
 	} {
 		got, err := parseSlug(tc.url)

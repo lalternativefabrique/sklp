@@ -19,7 +19,7 @@ import (
 // The chosen markers are deliberately unusual: containing both ===
 // fences and the literal "__SKLP_RUN_REPORT__" token, they will not
 // collide with anything a build step legitimately prints. Keep them in
-// sync with the spawner parser (apps/core/ci/infrastructure).
+// sync with the spawner parser (server side).
 const (
 	ReportSentinelBegin = "===__SKLP_RUN_REPORT_BEGIN__==="
 	ReportSentinelEnd   = "===__SKLP_RUN_REPORT_END__==="

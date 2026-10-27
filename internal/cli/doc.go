@@ -2,7 +2,7 @@
 // sklp-web documentation site. Like the completion generator, it walks
 // rootCommand() so the docs can never drift from the declared verbs/flags.
 //
-// The shape here IS the doc-site contract (apps/sklp-web consumes it). Keep it
+// The shape here IS the doc-site contract (the sklp-web docs site consumes it). Keep it
 // stable; additive fields only.
 package cli
 

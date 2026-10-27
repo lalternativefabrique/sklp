@@ -3,7 +3,7 @@
 // <cacheRoot>/spaces/<name>/). It is the single place the logic of
 // ls / get / up / down / exec / purge lives, so BOTH transports call it:
 //
-//   - the CLI (apps/sklp/cmd/sklp/space_*.go) parses flags via the cli façade
+//   - the CLI (cmd/sklp/space_*.go) parses flags via the cli façade
 //     and calls a Registry — it renders, it does not compute.
 //   - an HTTP API (the skalpai UI control plane) parses a request and calls the
 //     SAME Registry — it serializes JSON, it does not duplicate the logic.
