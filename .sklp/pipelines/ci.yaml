@@ -55,7 +55,7 @@ steps:
     run: |
       go generate ./space/embed/
       mkdir -p bin
-      CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -o bin/sklp ./cmd/sklp
-      CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -o bin/sklp-arm64 ./cmd/sklp
-      CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -o bin/sklet ./cmd/sklet
-      CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o bin/sklp-darwin ./cmd/sklp
+      CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -buildvcs=false -o bin/sklp ./cmd/sklp
+      CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -buildvcs=false -o bin/sklp-arm64 ./cmd/sklp
+      CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -buildvcs=false -o bin/sklet ./cmd/sklet
+      CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=false -o bin/sklp-darwin ./cmd/sklp
