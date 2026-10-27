@@ -1,0 +1,30 @@
+name: Bug report
+description: Something in sklp or sklet does not behave as documented.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `sklp version` (or `sklet version`).
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, the output you got, the output you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: Minimal steps, with the relevant `.sklp/*.yaml` if any. Strip secrets.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: Linux distro / kernel, or macOS version; rootless or root
