@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/assets/banner.png" alt="sklp — From dev to prod in one space." width="100%"></p>
+
 # sklp
 
 **One contract from your laptop to production. No daemon, no cluster, no YAML sprawl.**
