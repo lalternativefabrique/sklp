@@ -1,0 +1,13 @@
+runner:
+  toolchain:
+    go: "1.26.10"
+    zig: "0.16.0"
+
+  packages:
+    - git
+    - ca-certificates
+    - gcc
+    - libc6-dev
+
+  go_tools:
+    - golang.org/x/vuln/cmd/govulncheck@v1.3.0

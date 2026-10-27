@@ -20,6 +20,7 @@ import (
 	"os"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	otlploghttp "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -151,10 +152,10 @@ func (s *Shipper) reconcile() {
 func (s *Shipper) emit(service, line string) {
 	var rec otellog.Record
 	rec.SetTimestamp(time.Now())
-	rec.SetBody(otellog.StringValue(line))
+	rec.SetBody(attribute.StringValue(line))
 	rec.AddAttributes(
-		otellog.KeyValue{Key: "service.name", Value: otellog.StringValue(service)},
-		otellog.KeyValue{Key: "space.name", Value: otellog.StringValue(s.space)},
+		attribute.String("service.name", service),
+		attribute.String("space.name", s.space),
 	)
 	s.logger.Emit(context.Background(), rec)
 }

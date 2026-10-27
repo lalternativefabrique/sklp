@@ -1,0 +1,61 @@
+version: 1
+kind: pipeline
+name: ci
+
+# The sandbox tests (PTY, nested userns, mux fd-passing) need the host: a
+# rootless space cannot create containers.
+space: false
+
+tools:
+  zig: "0.16.0"
+
+on:
+  branches: ['**', '!main']
+
+scopes:
+  go:
+    - "**/*.go"
+    - "go.mod"
+    - "go.sum"
+    - "space/embed/**"
+
+steps:
+  - name: vet
+    scope: [go]
+    tools: [go]
+    run: |
+      go generate ./space/embed/
+      go vet ./...
+
+  - name: test
+    scope: [go]
+    tools: [go, zig]
+    filesystem: open
+    run: |
+      go generate ./space/embed/
+      CC="zig cc" CGO_ENABLED=1 go test -race -count=1 ./...
+
+  - name: test-integration
+    scope: [go]
+    tools: [go, zig]
+    filesystem: open
+    depends_on: [test]
+    run: |
+      go generate ./space/embed/
+      CC="zig cc" CGO_ENABLED=1 go test -race -count=1 -tags integration_runtime ./space/...
+
+  - name: govulncheck
+    scope: [go]
+    tools: [go, govulncheck]
+    run: govulncheck ./...
+
+  - name: build-matrix
+    scope: [go]
+    tools: [go]
+    run: |
+      go generate ./space/embed/
+      mkdir -p bin
+      CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -buildvcs=false -o bin/sklp ./cmd/sklp
+      CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -buildvcs=false -o bin/sklp-arm64 ./cmd/sklp
+      CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -buildvcs=false -o bin/sklet ./cmd/sklet
+      CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=false -o bin/sklp-darwin ./cmd/sklp
