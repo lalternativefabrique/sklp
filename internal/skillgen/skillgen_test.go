@@ -71,7 +71,7 @@ func TestGenerate_Genericisation(t *testing.T) {
 	}
 	// No skalpai-specific constants must leak from the source skills.
 	for name, s := range skills {
-		for _, leak := range []string{"70d4811f", "skalpai-family", "acme, sporee"} {
+		for _, leak := range []string{"deadbeef", "private-family", "foo, bar"} {
 			if strings.Contains(s.Body, leak) {
 				t.Errorf("skill %q leaks skalpai-specific constant %q", name, leak)
 			}

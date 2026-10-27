@@ -15,7 +15,7 @@ import (
 // Unlike gateway/infrastructure.StateClient (which GETs the unprefixed
 // /v1/state — the space the node's supervisor happened to start on, not a
 // selectable one), this always targets /v1/spaces/<space>/state: the same
-// SpaceRoutePrefix scheme apps/sklp/spacemanager/control/protocol.go defines
+// SpaceRoutePrefix scheme spacemanager/control/protocol.go defines
 // for RouteState on a multi-space node, and the one ControlApplier already
 // uses for RouteApply — so a health check after a reconcile_deploy Apply
 // asks about the SAME space the apply targeted, not whichever one the
@@ -30,7 +30,7 @@ func NewControlStateFetcher() *ControlStateFetcher {
 }
 
 // stateResponse mirrors spacemanager/control.StateResponse's wire shape
-// (apps/sklp/spacemanager/control/protocol.go) — that struct DOES carry
+// (spacemanager/control/protocol.go) — that struct DOES carry
 // explicit json tags (unlike Service/SpaceMeta — see control_applier.go's
 // applySpec doc), so this mirror matches those tags rather than relying on
 // Go's default field-name encoding.

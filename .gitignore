@@ -1,13 +1,12 @@
 /sklp
-/sklet
 /bin/
 /dist/
 /cmd/sklp/sklp
 /cmd/sklet/sklet
-/space/embed/runc-*
-/space/embed/slirp4netns-*
+/space/embed/bin/*
 .env
 .env.*
 .sklp/cache/
 .sklp/logs/
 .sklp/run/
+!/space/embed/bin/placeholder

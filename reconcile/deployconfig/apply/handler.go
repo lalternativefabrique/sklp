@@ -1,6 +1,6 @@
 // Package reconcile_deploy makes a node's deployed topology match a
 // deploy.yaml declared in Git — the topology counterpart of
-// apps/core/imageupdate/application/reconcile_from_git, which only tracks an
+// the server's reconcile_from_git handler, which only tracks an
 // image tag. See issue 206ec5bd for the full design and the secrets
 // limitation below.
 package apply

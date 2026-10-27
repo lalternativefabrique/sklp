@@ -332,7 +332,7 @@ func TestHostExecEnvCarriesProviderKey(t *testing.T) {
 // TestSecretsFileFormatMatchesLoadDotEnv pins the exact format handleRun
 // writes for -env-file: KEY=VALUE lines, one per secret, sorted so the file
 // is deterministic. This is the wire format spawn's loadDotEnv parses
-// (apps/sklp/pipeline/spawn/oci_embedded_linux.go) — a mismatch here would
+// (pipeline/spawn/oci_embedded_linux.go) — a mismatch here would
 // silently drop every secret on the Space/runc path with no error.
 func TestSecretsFileFormatMatchesLoadDotEnv(t *testing.T) {
 	secrets := map[string]string{"B_KEY": "b-val", "A_KEY": "a-val"}

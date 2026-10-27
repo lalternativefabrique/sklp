@@ -67,7 +67,7 @@ env_files: [.env]
 services:
   api:
     run: go run .
-    workdir: apps/core
+    workdir: services/api
     ready:
       http: http://localhost:4100/health
       timeout: 10s

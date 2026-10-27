@@ -40,13 +40,13 @@ func TestIsComposeFile(t *testing.T) {
 // the build tag flag (no `//go:build integration`).
 func TestDetectIntegrationTests_NameAndCompose(t *testing.T) {
 	root := t.TempDir()
-	mustWrite(t, root, "apps/core/pensee/integration_test.go",
+	mustWrite(t, root, "services/api/pensee/integration_test.go",
 		"package pensee\n\nimport \"testing\"\n\nfunc TestX(t *testing.T) { _ = \"postgres://\" }\n")
 	mustWrite(t, root, "compose.test.yml",
 		"services:\n  nats-test:\n    image: nats:2.10\n")
 
 	walked := []string{
-		filepath.Join(root, "apps/core/pensee/integration_test.go"),
+		filepath.Join(root, "services/api/pensee/integration_test.go"),
 		filepath.Join(root, "compose.test.yml"),
 	}
 	got := detectIntegrationTests(walked, root, []string{"compose.test.yml"})
@@ -54,7 +54,7 @@ func TestDetectIntegrationTests_NameAndCompose(t *testing.T) {
 	if got.HasBuildTag {
 		t.Errorf("no //go:build integration tag was present; HasBuildTag should be false")
 	}
-	if len(got.GoFiles) != 1 || got.GoFiles[0] != "apps/core/pensee/integration_test.go" {
+	if len(got.GoFiles) != 1 || got.GoFiles[0] != "services/api/pensee/integration_test.go" {
 		t.Errorf("expected integration test file to be surfaced, got %v", got.GoFiles)
 	}
 	wantHints := []string{"nats", "postgres"}

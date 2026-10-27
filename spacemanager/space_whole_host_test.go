@@ -69,7 +69,7 @@ func TestWholeHostRoute_OneHostOneSpace(t *testing.T) {
 	_, err := parseFront(t, `
         - space: shop-production
           host: shop.fr
-        - space: partage-production
+        - space: shop-production
           host: shop.fr
 `)
 	if err == nil || !strings.Contains(err.Error(), "exactly one space") {

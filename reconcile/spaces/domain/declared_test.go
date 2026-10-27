@@ -7,30 +7,30 @@ import (
 
 func nodeIDs() map[string]string { return map[string]string{"ci-instance-v1-server": "n1"} }
 
-// The incident this fixes: stopping altfab-production removed it from the list
+// The incident this fixes: stopping acme-production removed it from the list
 // entirely, leaving no way back to it from the UI. Declared in Git means listed.
 func TestMergeDeclared_StoppedSpaceStaysListed(t *testing.T) {
 	nodes := []Node{{Name: "ci-instance-v1-server", Spaces: []Space{{Name: "shop-production", Status: "running"}}}}
 	declared := []DeclaredSpace{
 		{Space: "shop-production", NodeID: "n1"},
-		{Space: "altfab-production", NodeID: "n1"},
+		{Space: "acme-production", NodeID: "n1"},
 	}
 
 	got := MergeDeclared(nodes, declared, nodeIDs())
 	if len(got[0].Spaces) != 2 {
 		t.Fatalf("spaces = %d, want 2 (the stopped one must stay listed)", len(got[0].Spaces))
 	}
-	var altfab *Space
+	var acme *Space
 	for i := range got[0].Spaces {
-		if got[0].Spaces[i].Name == "altfab-production" {
-			altfab = &got[0].Spaces[i]
+		if got[0].Spaces[i].Name == "acme-production" {
+			acme = &got[0].Spaces[i]
 		}
 	}
-	if altfab == nil {
+	if acme == nil {
 		t.Fatal("a declared space absent from the node must still be listed")
 	}
-	if altfab.Origin != OriginDeclared || altfab.Status != "stopped" {
-		t.Errorf("origin/status = %q/%q, want declared/stopped", altfab.Origin, altfab.Status)
+	if acme.Origin != OriginDeclared || acme.Status != "stopped" {
+		t.Errorf("origin/status = %q/%q, want declared/stopped", acme.Origin, acme.Status)
 	}
 }
 
@@ -60,7 +60,7 @@ func TestMergeDeclared_UndeclaredSpaceIsOrphan(t *testing.T) {
 // are stopped would invent a state nobody checked.
 func TestMergeDeclared_UnreachableNodeGetsNoStoppedRows(t *testing.T) {
 	nodes := []Node{{Name: "ci-instance-v1-server", Err: "dial tcp: timeout"}}
-	declared := []DeclaredSpace{{Space: "altfab-production", NodeID: "n1"}}
+	declared := []DeclaredSpace{{Space: "acme-production", NodeID: "n1"}}
 
 	got := MergeDeclared(nodes, declared, nodeIDs())
 	if len(got[0].Spaces) != 0 {
@@ -111,7 +111,7 @@ func TestMergeDeclared_CarriesSyncOntoARunningSpace(t *testing.T) {
 // A declared space that was never applied reads pending, not failed.
 func TestMergeDeclared_CarriesSyncOntoAStoppedSpace(t *testing.T) {
 	nodes := []Node{{Name: "ci-instance-v1-server"}}
-	declared := []DeclaredSpace{{Space: "altfab-production", NodeID: "n1", Sync: SyncPending}}
+	declared := []DeclaredSpace{{Space: "acme-production", NodeID: "n1", Sync: SyncPending}}
 
 	got := MergeDeclared(nodes, declared, nodeIDs())
 	if len(got[0].Spaces) != 1 {
@@ -127,10 +127,10 @@ func TestMergeDeclared_CarriesSyncOntoAStoppedSpace(t *testing.T) {
 // last apply has to reach the UI on its own.
 func TestMergeDeclared_CarriesLastAppliedAt(t *testing.T) {
 	at := time.Date(2026, 9, 4, 2, 31, 14, 0, time.UTC)
-	nodes := []Node{{Name: "ci-instance-v1-server", Spaces: []Space{{Name: "partage-production", Status: "running"}}}}
+	nodes := []Node{{Name: "ci-instance-v1-server", Spaces: []Space{{Name: "shop-production", Status: "running"}}}}
 	declared := []DeclaredSpace{
-		{Space: "partage-production", NodeID: "n1", Sync: SyncSynced, LastAppliedAt: &at},
-		{Space: "partage-staging", NodeID: "n1", Sync: SyncSynced, LastAppliedAt: &at},
+		{Space: "shop-production", NodeID: "n1", Sync: SyncSynced, LastAppliedAt: &at},
+		{Space: "shop-staging", NodeID: "n1", Sync: SyncSynced, LastAppliedAt: &at},
 	}
 
 	got := MergeDeclared(nodes, declared, nodeIDs())

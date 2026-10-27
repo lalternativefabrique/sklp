@@ -53,8 +53,8 @@ func TestPublishable_NpmRegistryFromNpmrc(t *testing.T) {
 	// .npmrc resolves the scope → registry mapping when
 	// publishConfig.registry is absent.
 	f, err := Scan(mkRepo(t, map[string]string{
-		"packages/sdk/package.json": `{"name":"@digstack/sdk","version":"0.1.0"}`,
-		"packages/sdk/.npmrc":       "@digstack:registry=https://npm.pkg.github.com\n",
+		"packages/sdk/package.json": `{"name":"@example-org/sdk","version":"0.1.0"}`,
+		"packages/sdk/.npmrc":       "@example-org:registry=https://npm.pkg.github.com\n",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ appVersion: "2.10.3"
 func TestPublishable_GoSDKModulePublic(t *testing.T) {
 	// Dir name 'sdk-go' + public module path = SDK candidate.
 	f, err := Scan(mkRepo(t, map[string]string{
-		"packages/sdk-go/go.mod": "module github.com/digstack/sdk-go\n\ngo 1.25.0\n",
+		"packages/sdk-go/go.mod": "module github.com/example-org/sdk-go\n\ngo 1.25.0\n",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -255,22 +255,22 @@ func TestPublishable_GoSDKModulePublic(t *testing.T) {
 }
 
 func TestPublishable_GoInternalModuleSkipped(t *testing.T) {
-	// apps/core is NOT an SDK — heuristic should skip it.
+	// services/api is NOT an SDK — heuristic should skip it.
 	f, err := Scan(mkRepo(t, map[string]string{
-		"apps/core/go.mod": "module github.com/digstack/skalpai/apps/core\n\ngo 1.25.0\n",
+		"services/api/go.mod": "module github.com/example-org/app/services/api\n\ngo 1.25.0\n",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := f.PublishableArtifacts.GoModules; len(got) != 0 {
-		t.Errorf("apps/core should not be surfaced as publishable: %+v", got)
+		t.Errorf("services/api should not be surfaced as publishable: %+v", got)
 	}
 }
 
 func TestPublishable_GoInternalPathOverridesPublicHost(t *testing.T) {
 	// Even with github.com/ host, /internal/ marker forbids publish.
 	f, err := Scan(mkRepo(t, map[string]string{
-		"packages/sdk-internal/go.mod": "module github.com/digstack/internal/sdk-internal\n\ngo 1.25.0\n",
+		"packages/sdk-internal/go.mod": "module github.com/example-org/internal/sdk-internal\n\ngo 1.25.0\n",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -289,8 +289,8 @@ func TestPublishable_GoInternalPathOverridesPublicHost(t *testing.T) {
 func TestPublishable_MixedMonorepo(t *testing.T) {
 	// A realistic bakery-like layout: Go SDK + npm SDK + helm chart.
 	f, err := Scan(mkRepo(t, map[string]string{
-		"packages/sdk-go/go.mod":       "module github.com/digstack/sdk-go\n\ngo 1.25.0\n",
-		"packages/sdk-js/package.json": `{"name":"@digstack/sdk","version":"0.5.0"}`,
+		"packages/sdk-go/go.mod":       "module github.com/example-org/sdk-go\n\ngo 1.25.0\n",
+		"packages/sdk-js/package.json": `{"name":"@example-org/sdk","version":"0.5.0"}`,
 		"charts/platform/Chart.yaml":   "apiVersion: v2\nname: platform\nversion: 0.1.0\n",
 	}))
 	if err != nil {

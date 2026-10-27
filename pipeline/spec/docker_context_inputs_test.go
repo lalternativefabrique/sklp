@@ -24,8 +24,8 @@ func TestDockerContextInputs(t *testing.T) {
 		}
 	}
 	// Real sources (should be included).
-	write("apps/core/main.go", "package main")
-	write("apps/core/Dockerfile", "FROM scratch")
+	write("services/api/main.go", "package main")
+	write("services/api/Dockerfile", "FROM scratch")
 	write("lib/util.go", "package util")
 	// Trees that must be pruned.
 	write(".git/config", "[core]")
@@ -36,12 +36,12 @@ func TestDockerContextInputs(t *testing.T) {
 	write(".dockerignore", "**/node_modules\n.git\n.claude\n*.secret\n")
 	write("creds.secret", "TOKEN")
 
-	got, err := DockerContextInputs(repo, ".", "apps/core/Dockerfile")
+	got, err := DockerContextInputs(repo, ".", "services/api/Dockerfile")
 	if err != nil {
 		t.Fatalf("dockerContextInputs: %v", err)
 	}
 
-	mustHave := []string{"apps/core/Dockerfile", "apps/core/main.go", "lib/util.go"}
+	mustHave := []string{"services/api/Dockerfile", "services/api/main.go", "lib/util.go"}
 	for _, want := range mustHave {
 		if !slices.Contains(got, want) {
 			t.Errorf("missing expected input %q in %v", want, got)
@@ -73,7 +73,7 @@ func TestDockerContextInputs_SubdirContext(t *testing.T) {
 	write("apps/migrations/Dockerfile", "FROM scratch")
 	write("apps/migrations/0001_init.sql", "create table x()")
 	write("apps/migrations/node_modules/junk/x.js", "x")
-	write("apps/core/main.go", "package main") // outside the context — excluded
+	write("services/api/main.go", "package main") // outside the context — excluded
 
 	got, err := DockerContextInputs(repo, "apps/migrations", "apps/migrations/Dockerfile")
 	if err != nil {
@@ -82,7 +82,7 @@ func TestDockerContextInputs_SubdirContext(t *testing.T) {
 	if !slices.Contains(got, "apps/migrations/0001_init.sql") {
 		t.Errorf("expected the migration file, got %v", got)
 	}
-	for _, bad := range []string{"apps/migrations/node_modules/junk/x.js", "apps/core/main.go"} {
+	for _, bad := range []string{"apps/migrations/node_modules/junk/x.js", "services/api/main.go"} {
 		if slices.Contains(got, bad) {
 			t.Errorf("%q should not be a context input, got %v", bad, got)
 		}

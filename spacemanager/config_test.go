@@ -11,7 +11,7 @@ import (
 const fixtureYAML = `
 services:
   api:
-    image: rg.fr-par.scw.cloud/skalpai/api:${TAG}
+    image: registry.example.com/acme/api:${TAG}
     replicas: 1
     expose: "8080"
     env:
@@ -60,7 +60,7 @@ func TestParse_ServicesAndMapping(t *testing.T) {
 	}
 
 	api := cfg.Services["api"]
-	if api.Image != "rg.fr-par.scw.cloud/skalpai/api:v1.2.3" {
+	if api.Image != "registry.example.com/acme/api:v1.2.3" {
 		t.Errorf("api image substitution failed: %q", api.Image)
 	}
 	svc := api.toService("api")
@@ -626,7 +626,7 @@ func TestValidate_HostBindVolumeRejected(t *testing.T) {
 services:
   a:
     image: x
-    volumes: ["/home/architect/.config/sklp/control:/loot:ro"]
+    volumes: ["/home/user/.config/sklp/control:/loot:ro"]
 `, `
 services:
   a: { image: x }

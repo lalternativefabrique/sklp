@@ -110,7 +110,7 @@ func TestCompileCI_ScopeSkip(t *testing.T) {
 		Steps: []CIStepInput{
 			{Name: "scoped", Run: "echo x", Scope: []string{"backend"}},
 		},
-		Scopes:       map[string][]string{"backend": {"apps/core/**"}},
+		Scopes:       map[string][]string{"backend": {"services/api/**"}},
 		ChangedFiles: []string{"apps/web/main.tsx"},
 	}
 	pl, err := CompileCI(in, noMatch, nil)
@@ -174,7 +174,7 @@ func TestCompileCI_RoundTripJSON(t *testing.T) {
 			{Name: "skipped", Run: "echo no", Scope: []string{"web"}},
 		},
 		Scopes:        map[string][]string{"web": {"apps/web/**"}},
-		ChangedFiles:  []string{"apps/core/main.go"},
+		ChangedFiles:  []string{"services/api/main.go"},
 		PipelineEnv:   map[string]string{"CI": "true"},
 		PipelineTools: map[string]string{"go": "1.25.0"},
 		Secrets:       []string{"GH_TOKEN"},

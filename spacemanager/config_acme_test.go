@@ -126,7 +126,7 @@ func TestParse_ACMERequiresEmail(t *testing.T) {
 }
 
 func TestParse_ACMEStorageDirIsNotAManifestField(t *testing.T) {
-	y := acmeBase + "    enabled: true\n    dns_provider: ovh\n    storage_dir: /home/architect/.config/sklp\nservices:\n  core:\n    image: img\n"
+	y := acmeBase + "    enabled: true\n    dns_provider: ovh\n    storage_dir: /home/user/.config/sklp\nservices:\n  core:\n    image: img\n"
 	if _, err := Parse([]byte(y)); err == nil || !strings.Contains(err.Error(), "storage_dir") {
 		t.Fatalf("want storage_dir rejected, got %v", err)
 	}

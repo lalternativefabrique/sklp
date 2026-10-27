@@ -24,12 +24,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// repoRootForTests mirrors the deploy contract tests' own relative path to
-// the repo root (three levels up from apps/sklp/spacemanager).
 func repoRootForTests() string {
 	wd, err := os.Getwd()
 	if err != nil {
 		return "."
 	}
-	return wd + "/../../.."
+	return wd + "/.."
 }

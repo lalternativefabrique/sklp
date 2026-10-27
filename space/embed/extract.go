@@ -22,11 +22,11 @@ func binDir(cacheRoot string) string {
 // embed (placeholder) surfaces loudly instead of producing a broken binary.
 func extract(cacheRoot, name, wantSHA256 string, content []byte) (string, error) {
 	if len(content) == 0 {
-		return "", fmt.Errorf("embedded binary %q is empty: build was not run with the helper binaries present (run `go generate ./apps/sklp/space/embed/`)", name)
+		return "", fmt.Errorf("embedded binary %q is empty: build was not run with the helper binaries present (run `go generate ./space/embed/`)", name)
 	}
 	got := sumHex(content)
 	if subtle.ConstantTimeCompare([]byte(got), []byte(wantSHA256)) != 1 {
-		return "", fmt.Errorf("embedded binary %q sha256 mismatch: got %s want %s (rerun `go generate ./apps/sklp/space/embed/`)", name, got, wantSHA256)
+		return "", fmt.Errorf("embedded binary %q sha256 mismatch: got %s want %s (rerun `go generate ./space/embed/`)", name, got, wantSHA256)
 	}
 	dir := binDir(cacheRoot)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

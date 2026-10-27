@@ -38,8 +38,8 @@ func vzBuildViaVM(ctx context.Context, o vzbuild.Options) int {
 		out, pkg string
 		tags     string
 	}{
-		{sklpBin, "./apps/sklp/cmd/sklp", "embedded_runtime"},
-		{agentBin, "./apps/sklp/cmd/sklp-vzagent", ""},
+		{sklpBin, "./cmd/sklp", "embedded_runtime"},
+		{agentBin, "./cmd/sklp-vzagent", ""},
 	} {
 		args := []string{"build", "-trimpath", "-ldflags=-s -w"}
 		if b.tags != "" {

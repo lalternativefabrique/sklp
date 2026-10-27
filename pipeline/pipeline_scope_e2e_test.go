@@ -52,15 +52,15 @@ func setupScopeRepo(t *testing.T, changed []string) string {
 }
 
 func TestRunPipeline_ScopeSkipsUnchangedSteps(t *testing.T) {
-	// Repo state: only apps/core/handler.go changed since HEAD~1.
+	// Repo state: only services/api/handler.go changed since HEAD~1.
 	// The backend step must run; the frontend step must be skipped.
-	repo := setupScopeRepo(t, []string{"apps/core/handler.go"})
+	repo := setupScopeRepo(t, []string{"services/api/handler.go"})
 
 	yaml := `
 version: 1
 kind: pipeline
 scopes:
-  backend:  ["apps/core/**"]
+  backend:  ["services/api/**"]
   frontend: ["apps/web/**"]
 steps:
   - name: always
@@ -122,7 +122,7 @@ func TestRunPipeline_ScopeListOR(t *testing.T) {
 version: 1
 kind: pipeline
 scopes:
-  backend:  ["apps/core/**"]
+  backend:  ["services/api/**"]
   frontend: ["apps/web/**"]
 steps:
   - name: integration
@@ -156,7 +156,7 @@ func TestRunPipeline_ScopeUnknownNameFails(t *testing.T) {
 version: 1
 kind: pipeline
 scopes:
-  backend: ["apps/core/**"]
+  backend: ["services/api/**"]
 steps:
   - name: oops
     scope: typo

@@ -25,7 +25,7 @@ func TestHandleApply_HostBindVolumeRefused(t *testing.T) {
 	}
 	c = c.WithSpace("production")
 
-	svc := spacemanager.Service{Name: "www", Volumes: []string{"/home/architect/.config/sklp/control:/loot:ro"}}
+	svc := spacemanager.Service{Name: "www", Volumes: []string{"/home/user/.config/sklp/control:/loot:ro"}}
 	spec, err := MarshalApplySpec([]spacemanager.Service{svc}, spacemanager.SpaceMeta{Name: "production", Stack: "www"})
 	if err != nil {
 		t.Fatalf("marshal spec: %v", err)

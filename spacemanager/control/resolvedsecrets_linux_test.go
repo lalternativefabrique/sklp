@@ -50,8 +50,8 @@ func TestResolvedSecrets_CollectsWhatTheManifestDrops(t *testing.T) {
 // The map must be keyed by the ref NAME (${S3_ACCESS_KEY}), not the env key
 // (PGBACKREST_REPO1_S3_KEY): ResolveEnvRefs re-resolves by name at boot, so a
 // key-keyed file left every `KEY: ${OTHER_NAME}` secret empty after an agent
-// restart — postgres lost its WAL archiving credentials on the partage
-// preflight while POSTGRES_PASSWORD (same-name) kept working by coincidence.
+// restart — postgres lost its WAL archiving credentials
+// while POSTGRES_PASSWORD (same-name) kept working by coincidence.
 func TestResolvedSecrets_RoundTripsThroughResolveEnvRefs(t *testing.T) {
 	refs := map[string]string{
 		"PGBACKREST_REPO1_S3_KEY": "S3_ACCESS_KEY",

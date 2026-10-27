@@ -1,9 +1,9 @@
 // Package embed carries the external OCI helper binaries (runc, slirp4netns)
 // embedded into the sklp binary so the embedded runtime needs nothing on PATH.
 //
-// The binaries themselves are NOT committed. Run `go generate ./...` in this
-// directory (or ./fetch.sh) to download + checksum-verify them into this
-// folder before a `-tags embedded_runtime` build. See README.md.
+// The binaries themselves are NOT committed. Run `go generate ./space/embed/`
+// (or ./fetch.sh) to download + checksum-verify them into ./bin before
+// building a binary that must ship them. See README.md.
 //
 // The pinned descriptors live in the embed-free subpackage ./meta so the gen
 // tool can read them WITHOUT compiling this //go:embed-bearing package (which

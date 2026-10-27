@@ -3,7 +3,7 @@
 # <instance>/dist/<version>/<binary>-<os>-<arch>:
 #   sklp  — the developer CLI      (install/sklp.sh,  /install/sklp.sh)
 #   sklet — the node-side agent    (install/sklet.sh, /install/sklet.sh)
-#           Linux containers, e.g. lalter/cortex's Dockerfile, so a task agent
+#           Linux containers, e.g. a downstream image's Dockerfile, so a task agent
 #           and a cross-repo GITHUB_TOKEN at every image build)
 #
 # sklp/sklet are static (CGO_ENABLED=0): no glibc dependency, runs on any

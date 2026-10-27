@@ -5,7 +5,7 @@
 // The flow is "compile once, execute many":
 //
 //  1. The LLM reads the YAML contract once and emits a Plan{} (this package).
-//  2. The Plan is signed and cached on disk (apps/sklp/internal/plan/cache.go).
+//  2. The Plan is signed and cached on disk (internal/plan/cache.go).
 //  3. Subsequent invocations load the cached Plan and execute it in pure Go.
 //  4. The LLM is invoked again only when (a) the cache is invalidated, or
 //     (b) a command fails and a diagnosis must be produced.
@@ -23,8 +23,8 @@ package plan
 //
 //	v1: initial release (PR #182).
 //	v2: PreflightStep.Cwd / ServiceSteps.Cwd added so contracts that
-//	    write `cd apps/core && govulncheck ./...` compile to a single
-//	    command run in the apps/core working dir, instead of a
+//	    write `cd services/api && govulncheck ./...` compile to a single
+//	    command run in the services/api working dir, instead of a
 //	    forbidden shell-composite which bash_allowlisted rejects.
 //	v3: KindCI shape added (CISteps + ToolPin). pipeline_exec.go now
 //	    compiles `kind: pipeline` YAML into Plan{Kind: KindCI} instead
@@ -162,9 +162,9 @@ type PreflightStep struct {
 
 	// Cwd is the working directory the commands run in, relative to
 	// the repo root. Empty means run at the repo root. This is how
-	// contracts that write `cd apps/core && govulncheck ./...`
+	// contracts that write `cd services/api && govulncheck ./...`
 	// compile down to one command (`govulncheck ./...`) executed in
-	// apps/core — bash_allowlisted refuses `cd` and `&&`, so the
+	// services/api — bash_allowlisted refuses `cd` and `&&`, so the
 	// directory MUST be expressed as metadata, not as a shell verb.
 	Cwd string `json:"cwd,omitempty"`
 

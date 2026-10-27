@@ -14,7 +14,7 @@ func TestSkalpaiDeployContract(t *testing.T) {
 	} {
 		t.Setenv(k, "placeholder")
 	}
-	path := filepath.Join("..", "..", "..", ".sklp", "skalpai", "deploy.yaml")
+	path := filepath.Join("..", ".sklp", "skalpai", "deploy.yaml")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("deploy contract not present: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestSkalpaiBackupContract(t *testing.T) {
 	} {
 		t.Setenv(k, "placeholder")
 	}
-	path := filepath.Join("..", "..", "..", ".sklp", "skalpai", "deploy.yaml")
+	path := filepath.Join("..", ".sklp", "skalpai", "deploy.yaml")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("deploy contract not present: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestSkalpaiPITRContract(t *testing.T) {
 	} {
 		t.Setenv(k, "placeholder")
 	}
-	path := filepath.Join("..", "..", "..", ".sklp", "skalpai", "deploy.yaml")
+	path := filepath.Join("..", ".sklp", "skalpai", "deploy.yaml")
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("deploy contract not present: %v", err)
 	}

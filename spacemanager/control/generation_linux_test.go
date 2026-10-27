@@ -32,7 +32,7 @@ func applyGeneration(t *testing.T, spec applySpec) {
 	}
 }
 
-// TestRepersistLive_KeptServiceUsesItsOwnGeneration replays the partage
+// TestRepersistLive_KeptServiceUsesItsOwnGeneration replays the shop
 // incident: a full apply renames an env key together with the image, core
 // crashes and is rolled back while web moves. The manifest must persist core
 // with the previous generation's refs and web with the current one, no secret
@@ -43,13 +43,13 @@ func TestRepersistLive_KeptServiceUsesItsOwnGeneration(t *testing.T) {
 
 	gen1 := applySpec{
 		Services: []spacemanager.Service{
-			{Name: "core", Image: "rg/core:1", DeclaredImage: "rg/core:1", Env: []string{"PARTAGE_MASTER_KEY=old-secret", "PORT=4100"}},
+			{Name: "core", Image: "rg/core:1", DeclaredImage: "rg/core:1", Env: []string{"SHOP_MASTER_KEY=old-secret", "PORT=4100"}},
 			{Name: "web", Image: "rg/web:1", DeclaredImage: "rg/web:1", Env: []string{"JWT_SECRET=jwt-old"}},
 		},
 		Meta: spacemanager.SpaceMeta{
 			Name:      space,
-			EnvRefs:   map[string]string{"PARTAGE_MASTER_KEY": "${PARTAGE_MASTER_KEY}", "JWT_SECRET": "${JWT_SECRET}"},
-			EnvValues: map[string]string{"PARTAGE_MASTER_KEY": "old-secret", "JWT_SECRET": "jwt-old"},
+			EnvRefs:   map[string]string{"SHOP_MASTER_KEY": "${SHOP_MASTER_KEY}", "JWT_SECRET": "${JWT_SECRET}"},
+			EnvValues: map[string]string{"SHOP_MASTER_KEY": "old-secret", "JWT_SECRET": "jwt-old"},
 		},
 	}
 	applyGeneration(t, gen1)
@@ -68,7 +68,7 @@ func TestRepersistLive_KeptServiceUsesItsOwnGeneration(t *testing.T) {
 	applyGeneration(t, gen2)
 
 	live := []spacemanager.Service{
-		{Name: "core", Image: "rg/core:1", Env: []string{"PARTAGE_MASTER_KEY=old-secret", "PORT=4100"}},
+		{Name: "core", Image: "rg/core:1", Env: []string{"SHOP_MASTER_KEY=old-secret", "PORT=4100"}},
 		{Name: "web", Image: "rg/web:2", Env: []string{"JWT_SECRET=jwt-new"}},
 	}
 	if err := RepersistLive(space, live); err != nil {
@@ -93,13 +93,13 @@ func TestRepersistLive_KeptServiceUsesItsOwnGeneration(t *testing.T) {
 	if core.Image != "rg/core:1" || core.DeclaredImage != "rg/core:2" {
 		t.Fatalf("core = image %q declared %q, want the kept image and the declared one", core.Image, core.DeclaredImage)
 	}
-	if _, ok := envOf(core)["PARTAGE_MASTER_KEY"]; !ok {
+	if _, ok := envOf(core)["SHOP_MASTER_KEY"]; !ok {
 		t.Fatalf("core lost its own env key: %v", core.Env)
 	}
 	if web.Image != "rg/web:2" || web.DeclaredImage != "rg/web:2" {
 		t.Fatalf("web = image %q declared %q", web.Image, web.DeclaredImage)
 	}
-	if meta.EnvRefs["PARTAGE_MASTER_KEY"] != "${PARTAGE_MASTER_KEY}" || meta.EnvRefs["PARTAGG_MASTER_KEY"] != "${PARTAGG_MASTER_KEY}" {
+	if meta.EnvRefs["SHOP_MASTER_KEY"] != "${SHOP_MASTER_KEY}" || meta.EnvRefs["PARTAGG_MASTER_KEY"] != "${PARTAGG_MASTER_KEY}" {
 		t.Fatalf("EnvRefs must carry both generations' keys: %v", meta.EnvRefs)
 	}
 
@@ -107,8 +107,8 @@ func TestRepersistLive_KeptServiceUsesItsOwnGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := envOf(booted[0])["PARTAGE_MASTER_KEY"]; got != "old-secret" {
-		t.Fatalf("kept core resolves PARTAGE_MASTER_KEY=%q at boot, want the previous value", got)
+	if got := envOf(booted[0])["SHOP_MASTER_KEY"]; got != "old-secret" {
+		t.Fatalf("kept core resolves SHOP_MASTER_KEY=%q at boot, want the previous value", got)
 	}
 	if got := envOf(booted[1])["JWT_SECRET"]; got != "jwt-new" {
 		t.Fatalf("moved web resolves JWT_SECRET=%q at boot, want the current value", got)

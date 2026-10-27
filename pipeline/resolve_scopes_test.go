@@ -11,7 +11,7 @@ import (
 // because the resolver only knew about service_map.
 func TestImpactedStepServices(t *testing.T) {
 	scopes := map[string][]string{
-		"core":    {"apps/core/**", "Dockerfile", "go.work"},
+		"core":    {"services/api/**", "Dockerfile", "go.work"},
 		"web":     {"apps/web/**", "packages/**", "Dockerfile.web"},
 		"migrate": {"apps/migrations/**"},
 	}
@@ -28,9 +28,9 @@ func TestImpactedStepServices(t *testing.T) {
 	}{
 		{"nested web path (the reported bug)", []string{"apps/web/src/pages/stack-issue-detail.tsx"}, []string{"web"}},
 		{"direct web child", []string{"apps/web/App.tsx"}, []string{"web"}},
-		{"core only", []string{"apps/core/issue/api.go"}, []string{"core"}},
+		{"core only", []string{"services/api/issue/api.go"}, []string{"core"}},
 		{"migrate only", []string{"apps/migrations/000042_x.up.sql"}, []string{"migrate"}},
-		{"core + web split", []string{"apps/core/issue/api.go", "apps/web/src/x.tsx"}, []string{"core", "web"}},
+		{"core + web split", []string{"services/api/issue/api.go", "apps/web/src/x.tsx"}, []string{"core", "web"}},
 		{"shared packages hits web", []string{"packages/ui/x.ts"}, []string{"web"}},
 		{"root file out of scope", []string{"README.md"}, []string{}},
 	}

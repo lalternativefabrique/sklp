@@ -52,7 +52,7 @@ func TestEvaluateTrigger_NegationCarvesMainOut(t *testing.T) {
 
 func TestEvaluateTrigger_CleanTree(t *testing.T) {
 	trig := &spec.TriggerBlock{Branches: []string{"main"}, CleanTree: true}
-	dirty := gitStub("main", " M apps/core/main.go\n?? scratch.txt\n")
+	dirty := gitStub("main", " M services/api/main.go\n?? scratch.txt\n")
 	err := evaluateTrigger(context.Background(), trig, "/repo", dirty)
 	if err == nil {
 		t.Fatal("a dirty tree must refuse the run")

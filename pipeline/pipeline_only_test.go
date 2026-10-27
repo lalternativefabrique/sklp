@@ -12,7 +12,7 @@ func onlyTestPipeline() Pipeline {
 		Version: 1,
 		Kind:    "pipeline",
 		Scopes: map[string][]string{
-			"core":    {"apps/core/**"},
+			"core":    {"services/api/**"},
 			"web":     {"apps/web/**"},
 			"migrate": {"apps/migrations/**"},
 		},
@@ -39,7 +39,7 @@ func statusByStep(t *testing.T, pl *plan.Plan) map[string]plan.CIStepStatus {
 // is the whole point of republishing one service from a clean tree.
 func TestCompilePipeline_Only_SelectsNamedScopes(t *testing.T) {
 	p := onlyTestPipeline()
-	changed := []string{"apps/core/main.go"}
+	changed := []string{"services/api/main.go"}
 
 	t.Run("single scope", func(t *testing.T) {
 		pl, err := CompilePipeline(p, CompilePipelineOptions{

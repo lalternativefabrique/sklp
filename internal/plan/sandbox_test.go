@@ -97,7 +97,7 @@ func TestComposeEnv_SecretsWinOverStepEnv(t *testing.T) {
 
 func TestResolveSandboxCwd(t *testing.T) {
 	repo := t.TempDir()
-	sub := filepath.Join(repo, "apps", "core")
+	sub := filepath.Join(repo, "services", "api")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestResolveSandboxCwd(t *testing.T) {
 		t.Errorf("empty cwd: got %q err %v", got, err)
 	}
 
-	got, err = resolveSandboxCwd(repo, "apps/core")
+	got, err = resolveSandboxCwd(repo, "services/api")
 	if err != nil || got != sub {
 		t.Errorf("subdir cwd: got %q err %v", got, err)
 	}
@@ -124,8 +124,8 @@ func TestCleanStepCwd_Escape(t *testing.T) {
 	}{
 		{"", false},
 		{".", false},
-		{"apps/core", false},
-		{"./apps/core", false},
+		{"services/api", false},
+		{"./services/api", false},
 		{"..", true},
 		{"../etc", true},
 		{"apps/../../etc", true},
@@ -574,7 +574,7 @@ func TestComposeEnv_ModReadonlyInjected(t *testing.T) {
 func TestComposeEnv_ModReadonlySkippedForManifestWriters(t *testing.T) {
 	for _, cmd := range []string{
 		"go mod tidy",
-		"cd apps/core && go mod download",
+		"cd services/api && go mod download",
 		"go work sync",
 		"go generate ./...",
 		"go mod tidy && go build ./...",

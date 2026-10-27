@@ -4,7 +4,7 @@ import "testing"
 
 func TestImagePolicy_UnsetAcceptsAnything(t *testing.T) {
 	var p ImagePolicy
-	for _, img := range []string{"busybox:latest", "rg.fr-par.scw.cloud/skalpai/core:1", "evil.example/x@sha256:0000000000000000000000000000000000000000000000000000000000000000"} {
+	for _, img := range []string{"busybox:latest", "registry.example.com/acme/core:1", "evil.example/x@sha256:0000000000000000000000000000000000000000000000000000000000000000"} {
 		if err := p.Check(img); err != nil {
 			t.Errorf("Check(%q) = %v, want nil", img, err)
 		}
@@ -12,8 +12,8 @@ func TestImagePolicy_UnsetAcceptsAnything(t *testing.T) {
 }
 
 func TestImagePolicy_TrustedRegistries(t *testing.T) {
-	p := ImagePolicy{TrustedRegistries: []string{"rg.fr-par.scw.cloud", "docker.io"}}
-	for _, img := range []string{"rg.fr-par.scw.cloud/skalpai/core:1", "nats:2.10-alpine", "docker.io/library/postgres:16", "RG.FR-PAR.SCW.CLOUD/skalpai/web:1"} {
+	p := ImagePolicy{TrustedRegistries: []string{"registry.example.com", "rg.fr-par.scw.cloud", "docker.io"}}
+	for _, img := range []string{"registry.example.com/acme/core:1", "nats:2.10-alpine", "docker.io/library/postgres:16", "RG.FR-PAR.SCW.CLOUD/skalpai/web:1"} {
 		if err := p.Check(img); err != nil {
 			t.Errorf("Check(%q) = %v, want accepted", img, err)
 		}

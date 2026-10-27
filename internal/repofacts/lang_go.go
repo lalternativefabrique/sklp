@@ -10,7 +10,7 @@ import (
 // detectGo finds every go.mod under the repo and returns one
 // ModuleFacts per file. The Go module convention says a go.mod can
 // live at any depth and is the canonical module boundary — we honour
-// that strictly. apps/core/go.mod and apps/sdk/go.mod produce two
+// that strictly. services/api/go.mod and apps/sdk/go.mod produce two
 // independent modules; the LLM emits one govulncheck preflight per
 // module.
 //

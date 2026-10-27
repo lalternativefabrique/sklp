@@ -29,12 +29,12 @@ stores:
     config:
       region: fr-par
 secrets:
-  - name: LALTER_LLM_API_KEY
+  - name: ACME_LLM_API_KEY
     store: scw
-    key: /platform-ops/altfab/llm-api-key
+    key: /platform-ops/acme/llm-api-key
   - name: PG_S3_ACCESS_KEY
     store: scw
-    key: /platform-ops/buckets/ovh/altfab
+    key: /platform-ops/buckets/ovh/acme
     property: access_key
 `))
 	if err != nil {

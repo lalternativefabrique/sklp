@@ -13,10 +13,10 @@ func TestDetectAPIContracts_OpenAPI(t *testing.T) {
 		{
 			"swagger.json + swagger.yaml",
 			map[string]string{
-				"apps/core/docs/swagger.json": "{}",
-				"apps/core/docs/swagger.yaml": "openapi: 3.0\n",
+				"services/api/docs/swagger.json": "{}",
+				"services/api/docs/swagger.yaml": "openapi: 3.0\n",
 			},
-			[]string{"apps/core/docs/swagger.json", "apps/core/docs/swagger.yaml"},
+			[]string{"services/api/docs/swagger.json", "services/api/docs/swagger.yaml"},
 		},
 		{
 			"openapi.yaml at root",
@@ -138,8 +138,8 @@ func TestDetectAPIContracts_SwagToolMarker(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			f, err := Scan(mkRepo(t, map[string]string{
-				"apps/core/docs/swagger.json": "{}",
-				"apps/core/docs/docs.go":      c.docsGo,
+				"services/api/docs/swagger.json": "{}",
+				"services/api/docs/docs.go":      c.docsGo,
 			}))
 			if err != nil {
 				t.Fatal(err)

@@ -36,7 +36,7 @@ func TestCheckScopeOutputRecursion(t *testing.T) {
 		{
 			name: "no overlap, no warning",
 			pipeline: Pipeline{
-				Scopes: map[string][]string{"src": {"apps/core/**"}},
+				Scopes: map[string][]string{"src": {"services/api/**"}},
 				Steps: []Step{
 					{Name: "build", Outputs: []string{"dist/server"}},
 				},

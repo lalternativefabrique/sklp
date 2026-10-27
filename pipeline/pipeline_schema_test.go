@@ -78,7 +78,7 @@ func TestPipelineSchemaIsDeterministic(t *testing.T) {
 	tmp := t.TempDir()
 	out := filepath.Join(tmp, "pipeline.schema.json")
 
-	// Resolve the apps/sklp module root from the test file location.
+	// Resolve the module root from the test file location.
 	_, thisFile, _, _ := runtime.Caller(0)
 	moduleRoot := filepath.Dir(filepath.Dir(thisFile))
 
@@ -97,7 +97,7 @@ func TestPipelineSchemaIsDeterministic(t *testing.T) {
 		t.Fatalf("read regenerated schema: %v", err)
 	}
 	if !bytes.Equal(got, loadSchemaBytes(t)) {
-		t.Fatal("regenerated schema differs from checked-in file; run `go generate ./apps/sklp/...`")
+		t.Fatal("regenerated schema differs from checked-in file; run `go generate ./...`")
 	}
 }
 

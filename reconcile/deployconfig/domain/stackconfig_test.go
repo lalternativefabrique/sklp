@@ -6,10 +6,10 @@ const mixedConfig = `
 encryptionsalt: T5kqEkG2qjHYVyWLzmj01A==
 encryptioniters: 600000
 config:
-    LALTER_HOST: altfab.fr
+    ACME_HOST: acme.example
     JWT_SECRET:
         secure: JHNEG00VxH1h92nUGbGtGctsB68D0kDANInFGVgRsC5T
-    LALTER_LLM_MODEL: deepseek-v4-flash-0731
+    ACME_LLM_MODEL: deepseek-v4-flash-0731
 `
 
 // A sealed value is encrypted with a passphrase this process does not have,
@@ -17,7 +17,7 @@ config:
 func TestParsePlainConfigSkipsSealedValues(t *testing.T) {
 	got := ParsePlainConfig([]byte(mixedConfig))
 
-	if got["LALTER_HOST"] != "altfab.fr" || got["LALTER_LLM_MODEL"] != "deepseek-v4-flash-0731" {
+	if got["ACME_HOST"] != "acme.example" || got["ACME_LLM_MODEL"] != "deepseek-v4-flash-0731" {
 		t.Fatalf("plain values = %v, want both read", got)
 	}
 	if _, ok := got["JWT_SECRET"]; ok {

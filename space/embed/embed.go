@@ -1,22 +1,37 @@
 package embed
 
-// runcBinary / slirpBinary are the helper binaries baked into sklp at build
-// time, declared in the GOARCH-tagged embed_<arch>.go files. They are NOT in
-// git: `go generate ./apps/sklp/space/embed/` (or ./fetch.sh) downloads +
-// checksum-verifies them first. If they are absent the build fails with
-// "pattern runc-<arch>: no matching files found" — run the generate step,
-// then rebuild with -tags embedded_runtime.
+import (
+	stdembed "embed"
+	"runtime"
+)
+
+// bin/ holds the runc and slirp4netns helpers fetched by `go generate
+// ./space/embed/`. They are gitignored; only bin/placeholder is committed so
+// the package compiles without them and extract fails at runtime instead.
+//
+//go:embed bin
+var binFS stdembed.FS
+
+func asset(name string) []byte {
+	b, err := binFS.ReadFile("bin/" + name)
+	if err != nil {
+		return nil
+	}
+	return b
+}
 
 // ExtractRunc writes the embedded runc into the runtime bin cache and returns
 // its absolute path. Idempotent across runs (see extract).
 func ExtractRunc(cacheRoot string) (string, error) {
-	return extract(cacheRoot, "runc", assetSHA256("runc-"+archSuffix), runcBinary)
+	name := "runc-" + runtime.GOARCH
+	return extract(cacheRoot, "runc", assetSHA256(name), asset(name))
 }
 
 // ExtractSlirp writes the embedded slirp4netns into the runtime bin cache and
 // returns its absolute path. Idempotent across runs (see extract).
 func ExtractSlirp(cacheRoot string) (string, error) {
-	return extract(cacheRoot, "slirp4netns", assetSHA256("slirp4netns-"+archSuffix), slirpBinary)
+	name := "slirp4netns-" + runtime.GOARCH
+	return extract(cacheRoot, "slirp4netns", assetSHA256(name), asset(name))
 }
 
 func assetSHA256(name string) string {

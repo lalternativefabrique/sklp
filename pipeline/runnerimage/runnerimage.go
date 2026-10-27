@@ -334,12 +334,11 @@ func renderFromBase(r Runner) (string, error) {
 	return b.String(), nil
 }
 
-// renderFromSource is the legacy path: compile sklp from the skalpai
-// sources in a builder stage, then assemble the runtime image. It
-// REQUIRES the skalpai repo as the Docker build context (COPY apps/sklp,
-// go.work, ...) and therefore only works when building from within the
-// skalpai repo — i.e. (re)building skalpai's own runner image during
-// development. For any other project, set runner.base_image instead.
+// renderFromSource is the legacy path: compile sklp from source in a
+// builder stage, then assemble the runtime image. It requires the sklp
+// repo as the Docker build context and therefore only works when
+// (re)building sklp's own runner image during development. For any other project, set
+// runner.base_image instead.
 func renderFromSource(r Runner) (string, error) {
 	if r.Toolchain["go"] == "" {
 		return "", fmt.Errorf("runner.toolchain.go is required when building from source (used as the sklp-build stage base); set runner.base_image to skip source compilation")
@@ -380,14 +379,8 @@ func renderFromSource(r Runner) (string, error) {
 		fmt.Fprintf(&b, "ENV %s=%s\n", k, r.Env[k])
 	}
 	b.WriteString("WORKDIR /build\n")
-	b.WriteString("COPY go.work go.work.sum ./\n")
-	b.WriteString("COPY apps/sklp apps/sklp\n")
-	b.WriteString("COPY apps/engine apps/engine\n")
-	b.WriteString("COPY apps/core/go.mod apps/core/go.mod\n")
-	b.WriteString("COPY apps/core/go.sum apps/core/go.sum\n")
-	b.WriteString("COPY apps/admin-api/go.mod apps/admin-api/go.mod\n")
-	b.WriteString("COPY apps/admin-api/go.sum apps/admin-api/go.sum\n")
-	b.WriteString("WORKDIR /build/apps/sklp\n")
+	b.WriteString("COPY go.mod go.sum ./\n")
+	b.WriteString("COPY . .\n")
 
 	if hasSecret(r.Secrets, "GITHUB_TOKEN") {
 		b.WriteString(`RUN --mount=type=secret,id=github_token sh -c 'if [ -s /run/secrets/github_token ]; then echo "machine github.com login oauth2 password $(cat /run/secrets/github_token)" > /root/.netrc; fi && go mod download && rm -f /root/.netrc'

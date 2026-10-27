@@ -57,10 +57,10 @@ func TestScan_GoMonorepo_FindsAllModules(t *testing.T) {
 	// The bakery-style layout that the LLM missed: two go.mod
 	// under apps/, with a go.work at the root pointing at them.
 	dir := mkRepo(t, map[string]string{
-		"go.work":            "go 1.25.0\n\nuse (\n\t./apps/core\n\t./apps/sdk-go\n)\n",
-		"apps/core/go.mod":   "module github.com/acme/bakery/core\n\ngo 1.25.0\n",
-		"apps/core/go.sum":   "",
-		"apps/core/main.go":  "package main\n",
+		"go.work":            "go 1.25.0\n\nuse (\n\t./apps/api\n\t./apps/sdk-go\n)\n",
+		"apps/api/go.mod":    "module github.com/acme/bakery/core\n\ngo 1.25.0\n",
+		"apps/api/go.sum":    "",
+		"apps/api/main.go":   "package main\n",
 		"apps/sdk-go/go.mod": "module github.com/acme/bakery/sdk\n\ngo 1.24.0\n",
 		"apps/sdk-go/sdk.go": "package sdk\n",
 	})

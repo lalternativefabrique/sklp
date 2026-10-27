@@ -3,7 +3,7 @@ package control
 // netserve_multi.go is the multi-space network control API: ONE TCP+TLS
 // listener on the node, dispatching to N spaces' Supervisors by path prefix
 // (SpaceRoutePrefix). It replaces the single-space assumption baked into
-// newMux/ServeNet — see apps/sklp/sklet/agent.go's RunAgent, which now
+// newMux/ServeNet — see sklet/agent.go's RunAgent, which now
 // materialises every space this node runs, not one fixed at boot.
 //
 // Design: rather than rewrite every route handler to resolve its Supervisor
@@ -37,7 +37,7 @@ import (
 // controller.SpaceController.AddSpace) before returning. It blocks until the
 // space is ready to serve or has failed to start. Passed to ServeNetMulti so
 // a request for an unknown space can be satisfied without restarting the
-// process — see apps/sklp/sklet/agent.go's RunAgent, which now discovers
+// process — see sklet/agent.go's RunAgent, which now discovers
 // spaces from persisted manifests only for its INITIAL boot set; a space
 // deployed for the first time afterwards reaches this hook instead.
 type Materializer func(space string) error

@@ -16,7 +16,7 @@ func TestCompilePipeline_Force_BypassesScopeFilter(t *testing.T) {
 		Version: 1,
 		Kind:    "pipeline",
 		Scopes: map[string][]string{
-			"backend":  {"apps/core/**"},
+			"backend":  {"services/api/**"},
 			"frontend": {"apps/web/**"},
 			"sdk":      {"packages/sdk/**"},
 		},

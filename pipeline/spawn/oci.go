@@ -2,7 +2,7 @@
 //
 // Instead of executing a pipeline in-process, it runs `sklp run <task>
 // -repo /workspace` inside the runner image via the in-process runc +
-// Space runtime (apps/sklp/space), so the toolchain comes from the
+// Space runtime (space), so the toolchain comes from the
 // image rather than the host. `sklp run <task>` on a laptop is then
 // bit-equivalent to what core does for a remote CI run.
 package spawn
@@ -50,7 +50,7 @@ type Config struct {
 	TaskName string
 
 	// RunnerKind, when set, selects a sibling runner image ("base",
-	// "ops", or a full rg.fr-par.scw.cloud/skalpai/* reference) instead
+	// "ops", or a full registry.example.com/acme/* reference) instead
 	// of the spawner's default Image.
 	RunnerKind string
 
@@ -127,7 +127,7 @@ type OCISpawner struct {
 func (s *OCISpawner) Name() string { return "oci" }
 
 // Spawn runs the pipeline in a Space via the in-process runc + Space
-// runtime (apps/sklp/space) and returns the JSON report the run
+// runtime (space) and returns the JSON report the run
 // emitted (or whatever it emitted before failing, when err != nil).
 // "embedded" is the legacy alias for "space"; both route the same way.
 func (s *OCISpawner) Spawn(ctx context.Context, cfg Config) (string, error) {
@@ -241,4 +241,4 @@ func quoteErr(name string, err error) error {
 
 // DefaultRunnerImage is used when no image is provided via -runner-image
 // or SKLP_CI_RUNNER_IMAGE. Mirrors core's defaultRunnerImage.
-const DefaultRunnerImage = "rg.fr-par.scw.cloud/skalpai/sklp-runner-base:latest"
+const DefaultRunnerImage = "registry.example.com/acme/sklp-runner-base:latest"

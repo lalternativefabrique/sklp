@@ -10,7 +10,7 @@ import (
 // and per-service TCP listeners — one process, external to every Space,
 // mediating every cross-Space call. IP is the single fixed local address
 // every Space is routed to via a /32 exception through its egress
-// blackhole (see apps/sklp/space/spacenet/allowcontroller_linux.go). When
+// blackhole (see space/spacenet/allowcontroller_linux.go). When
 // mesh is joined, the HTTP proxy and TCP listeners ALSO bind on MeshIP, so
 // a remote node's caller (resolved via DNS to MeshIP directly, never
 // relayed through its own controller) lands on the exact same routing

@@ -3,17 +3,17 @@ package imagebuild
 import "testing"
 
 // the real acme core Dockerfile (multi-stage go build, secret, COPY --from).
-const synthizCoreDockerfile = `FROM golang:1.25 AS builder
+const betaCoreDockerfile = `FROM golang:1.25 AS builder
 WORKDIR /src
-ENV GONOSUMCHECK=github.com/digstack/skalpai
+ENV GONOSUMCHECK=github.com/example-org/app
 COPY lib/transcribe/ ./lib/transcribe/
-COPY apps/core/go.mod apps/core/go.sum ./apps/core/
-WORKDIR /src/apps/core
+COPY services/api/go.mod services/api/go.sum ./services/api/
+WORKDIR /src/services/api
 RUN --mount=type=secret,id=github_token \
     echo "machine github.com login oauth2 password $(cat /run/secrets/github_token)" > /root/.netrc && \
     go mod download && \
     rm /root/.netrc
-COPY apps/core/ .
+COPY services/api/ .
 RUN CGO_ENABLED=0 go build -o /out/core .
 
 FROM alpine:3.20
@@ -26,8 +26,8 @@ EXPOSE 4000
 ENTRYPOINT ["/app/core"]
 `
 
-func TestParse_SynthizCore_TwoStages(t *testing.T) {
-	df, err := Parse(synthizCoreDockerfile)
+func TestParse_BetaCore_TwoStages(t *testing.T) {
+	df, err := Parse(betaCoreDockerfile)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestParse_SynthizCore_TwoStages(t *testing.T) {
 
 // TestParse_CopyFrom resolves COPY --from=builder to the builder stage.
 func TestParse_CopyFrom(t *testing.T) {
-	df, _ := Parse(synthizCoreDockerfile)
+	df, _ := Parse(betaCoreDockerfile)
 	// Find the COPY --from in the final stage.
 	var copyFrom *CopySpec
 	for _, in := range df.Target().Instructions {
@@ -79,7 +79,7 @@ func TestParse_CopyFrom(t *testing.T) {
 
 // TestParse_RunSecret peels the --mount=type=secret flag and keeps the command.
 func TestParse_RunSecret(t *testing.T) {
-	df, _ := Parse(synthizCoreDockerfile)
+	df, _ := Parse(betaCoreDockerfile)
 	var found bool
 	for _, in := range df.Stages[0].Instructions {
 		if in.Op == OpRun {

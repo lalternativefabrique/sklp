@@ -43,7 +43,7 @@ func imageCommand() cli.Command {
 				Flags: []cli.Flag{
 					{Name: "dockerfile", Type: cli.StringFlag, StringDefault: "Dockerfile", Usage: "path to the Dockerfile (relative to --context)"},
 					{Name: "context", Type: cli.StringFlag, StringDefault: ".", Usage: "Docker build context directory"},
-					{Name: "image", Type: cli.StringFlag, Usage: "destination image ref WITHOUT tag, e.g. rg.fr-par.scw.cloud/skalpai/core (required)"},
+					{Name: "image", Type: cli.StringFlag, Usage: "destination image ref WITHOUT tag, e.g. registry.example.com/acme/core (required)"},
 					{Name: "tag", Type: cli.StringFlag, Usage: "image tag (default: auto YYYYMMDD-HHMM-<short-sha>, UTC build time + git HEAD)"},
 					{Name: "scan", Type: cli.BoolFlag, Usage: "scan the built image with Trivy (daemonless) and abort the push on a HIGH/CRITICAL fixable finding"},
 					{Name: "secret", Type: cli.StringSliceFlag, Usage: "build secret: id=<id>,env=<ENV> or id=<id>,src=<file> (repeatable)"},

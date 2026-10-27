@@ -100,7 +100,7 @@ func TestValidImageRef(t *testing.T) {
 	valid := []string{
 		"rg.example.com/ns/web:20260820-1349-bff7534",
 		"debian:trixie-slim",
-		"rg.fr-par.scw.cloud/altfab/www:1.0.0",
+		"registry.example.com/acme/www:1.0.0",
 	}
 	for _, ref := range valid {
 		if err := validImageRef(ref); err != nil {
@@ -125,8 +125,7 @@ func TestValidImageRef(t *testing.T) {
 // values are expanded from the space env. Persisting the secrets that apply
 // "resolved" must not shrink the file: a var referenced only inside a
 // composed value has no whole-value entry to be re-collected from, and losing
-// it left the next roll expanding "https://${HOST}" to "https://" (partage,
-// 2026-09-04).
+// it left the next roll expanding "https://${HOST}" to "https://".
 func TestSetImageKeepsTemplateVarsInSpaceEnv(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := persistManifest(applySpec{

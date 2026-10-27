@@ -101,9 +101,9 @@ func testNode() *NodeAddress {
 func TestHandleCreatesWatchesDeclaredInGit(t *testing.T) {
 	yaml := `
 watches:
-  - name: partage-core-test
+  - name: shop-core-test
     service: core
-    image_repo: rg.fr-par.scw.cloud/partage/core-test
+    image_repo: registry.example.com/shop/core-test
     node_id: n1
     space: production
 `
@@ -116,7 +116,7 @@ watches:
 	if len(repo.saved) != 1 {
 		t.Fatalf("saved = %d watches, want 1", len(repo.saved))
 	}
-	if repo.saved[0].Name != "partage-core-test" || repo.saved[0].Service != "core" {
+	if repo.saved[0].Name != "shop-core-test" || repo.saved[0].Service != "core" {
 		t.Fatalf("saved watch = %+v, want name/service from YAML", repo.saved[0])
 	}
 }
@@ -148,7 +148,7 @@ func TestHandleDeletesOnlyOwnRepoWatches(t *testing.T) {
 }
 
 func TestHandleUpdatesExistingWatchPreservingRuntimeState(t *testing.T) {
-	existing, _ := domain.NewWatch("s1", "partage-core-test", "rg.example/old", "", "web",
+	existing, _ := domain.NewWatch("s1", "shop-core-test", "rg.example/old", "", "web",
 		"https://flight:6464", "production", "tok", "")
 	existing.ID = "w1"
 	existing.CurrentTag = "20260101-0000-abcdef0"
@@ -158,9 +158,9 @@ func TestHandleUpdatesExistingWatchPreservingRuntimeState(t *testing.T) {
 
 	yaml := `
 watches:
-  - name: partage-core-test
+  - name: shop-core-test
     service: core
-    image_repo: rg.fr-par.scw.cloud/partage/core-test
+    image_repo: registry.example.com/shop/core-test
     node_id: n1
     space: production
 `
@@ -176,7 +176,7 @@ watches:
 	if got.ID != "w1" {
 		t.Fatalf("ID = %q, want the existing row's id preserved", got.ID)
 	}
-	if got.Service != "core" || got.ImageRepo != "rg.fr-par.scw.cloud/partage/core-test" {
+	if got.Service != "core" || got.ImageRepo != "registry.example.com/shop/core-test" {
 		t.Fatalf("got = %+v, want fields refreshed from Git", got)
 	}
 	if got.CurrentTag != "20260101-0000-abcdef0" || got.Enabled != false {
@@ -200,9 +200,9 @@ watches:
     service: core
     image_repo: rg.fr-par.scw.cloud/broken
     node_id: missing-node
-  - name: partage-core-test
+  - name: shop-core-test
     service: core
-    image_repo: rg.fr-par.scw.cloud/partage/core-test
+    image_repo: registry.example.com/shop/core-test
     node_id: n1
     space: production
 `
@@ -212,7 +212,7 @@ watches:
 	if err := h.Handle(context.Background(), Command{StackID: "s1", Repo: "acme/widgets", Ref: "abc123"}); err != nil {
 		t.Fatalf("Handle: %v", err)
 	}
-	if len(repo.saved) != 1 || repo.saved[0].Name != "partage-core-test" {
+	if len(repo.saved) != 1 || repo.saved[0].Name != "shop-core-test" {
 		t.Fatalf("saved = %+v, want only the valid entry reconciled", repo.saved)
 	}
 }
@@ -232,14 +232,14 @@ func TestHandleNoOpsWhenFileIsAbsent(t *testing.T) {
 func TestHandleRequiresEachWatchToNameItsSpace(t *testing.T) {
 	yaml := `
 watches:
-  - name: partage-core
+  - name: shop-core
     service: core
-    image_repo: rg.fr-par.scw.cloud/partage/core
+    image_repo: registry.example.com/shop/core
     node_id: n1
-    space: partage-production
-  - name: altfab-core
+    space: shop-production
+  - name: acme-core
     service: core
-    image_repo: rg.fr-par.scw.cloud/altfab/core
+    image_repo: registry.example.com/acme/core
     node_id: n1
 `
 	repo := newStubRepo()
@@ -252,10 +252,10 @@ watches:
 	for _, w := range repo.saved {
 		got[w.Name] = w.NodeSpace
 	}
-	if got["partage-core"] != "partage-production" {
-		t.Fatalf("partage-core rolls into %q, want the declared partage-production", got["partage-core"])
+	if got["shop-core"] != "shop-production" {
+		t.Fatalf("shop-core rolls into %q, want the declared shop-production", got["shop-core"])
 	}
-	if _, saved := got["altfab-core"]; saved {
+	if _, saved := got["acme-core"]; saved {
 		t.Fatal("a watch naming no space must be skipped, not pointed at a guessed one")
 	}
 }
@@ -290,7 +290,7 @@ func (c *countingNodes) CredentialByID(_ context.Context, _, nodeID string) (Nod
 func TestHandleResolvesNodeNameWithoutIDLookup(t *testing.T) {
 	yaml := `
 watches:
-  - name: partage-core
+  - name: shop-core
     service: core
     image_repo: rg.example/core
     node: flight
@@ -315,7 +315,7 @@ watches:
 func TestHandleStillResolvesLegacyNodeID(t *testing.T) {
 	yaml := `
 watches:
-  - name: partage-core
+  - name: shop-core
     service: core
     image_repo: rg.example/core
     node_id: n1
@@ -341,7 +341,7 @@ watches:
 func TestHandleSkipsNodeWithNoCredential(t *testing.T) {
 	yaml := `
 watches:
-  - name: partage-core
+  - name: shop-core
     service: core
     image_repo: rg.example/core
     node: someone-elses-node

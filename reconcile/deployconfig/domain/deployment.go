@@ -4,7 +4,7 @@
 // A Deployment binds one deploy.yaml to the node/space deploy-root.yaml
 // declares for it, plus a fingerprint of the manifest last applied from Git — the piece
 // imageupdate's Watch deliberately does not need (see
-// apps/core/imageupdate/domain/watch.go's package doc: a Watch names a
+// the server's imageupdate Watch: a Watch names a
 // service and a tag, never a manifest). This aggregate closes that gap for
 // the topology itself: Skalpai can apply a deploy.yaml's full service set to
 // a node, not just roll an existing service onto a new tag.

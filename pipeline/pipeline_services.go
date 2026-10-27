@@ -17,7 +17,7 @@
 //
 // # K8s skip contract
 //
-// The K8s spawner (apps/core/ci/infrastructure/spawner_k8s.go) sets
+// The K8s spawner (the server's k8s spawner) sets
 // SKLP_RUNNER_MODE=k8s on the runner container's env. When that env
 // var is observed here, the orchestrator is bypassed: services are
 // already running as sidecars in the Pod, and an extra local boot
@@ -48,7 +48,7 @@ const RunnerModeEnv = "SKLP_RUNNER_MODE"
 const RunnerModeK8s = "k8s"
 
 // RunnerModeEmbedded is the value of SKLP_RUNNER_MODE set by the embedded
-// OCI backend (apps/sklp/space). Like K8s, services are managed OUTSIDE
+// OCI backend (space). Like K8s, services are managed OUTSIDE
 // the runner container — the runtime launches them as netns-sharing
 // sidecars host-side, so the inner runner must NOT boot them locally
 // (there is no docker in the runner image). The shared netns makes them

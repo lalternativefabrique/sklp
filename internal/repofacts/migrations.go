@@ -37,8 +37,8 @@ type MigrationsFacts struct {
 	LikelyCommand string
 
 	// LikelyWorkdir is the directory the command should run in
-	// (typically the parent service's workdir, e.g. apps/core for
-	// migrations sitting in apps/core/migrations or apps/migrations).
+	// (typically the parent service's workdir, e.g. services/api for
+	// migrations sitting in services/api/migrations or apps/migrations).
 	LikelyWorkdir string
 
 	// Source describes where the LikelyCommand came from so the LLM
@@ -80,7 +80,7 @@ func DetectMigrations(repo string) []MigrationsFacts {
 	// Walk the repo with a shallow depth cap. We're looking for a
 	// handful of well-known directory names, so a full WalkDir would
 	// be overkill — but the structure varies enough between repos
-	// (apps/core/migrations vs migrations/ vs db/migrate) that we
+	// (services/api/migrations vs migrations/ vs db/migrate) that we
 	// must look beyond the root.
 	candidateDirs := findCandidateMigrationDirs(repo, 4)
 
@@ -263,7 +263,7 @@ var golangMigrateRE = regexp.MustCompile(`^\d{4,14}_[\w-]+\.(up|down)\.sql$`)
 // command should run. For migrations at <svc>/migrations or
 // <svc>/db/migrations, the workdir is <svc>. For top-level migrations
 // (e.g. bakery: apps/migrations) we pick the sibling Go service that
-// likely owns them — typically apps/core.
+// likely owns them — typically services/api.
 func guessGoMigrateWorkdir(repo, migrationsPath string) string {
 	parent := filepath.ToSlash(filepath.Dir(migrationsPath))
 	// Case 1: migrations live INSIDE the service dir.

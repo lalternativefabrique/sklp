@@ -65,11 +65,11 @@ func newMultiTestServerWithMaterializer(t *testing.T, reg *Registry, materialize
 // other's Supervisor.
 func TestMultiSpace_TwoSpacesRouteIndependently(t *testing.T) {
 	www := &fakeSupervisor{ready: true, services: []spacemanager.ServiceSnapshot{{Name: "www"}}}
-	partage := &fakeSupervisor{ready: true, services: []spacemanager.ServiceSnapshot{{Name: "core"}, {Name: "web"}}}
+	shop := &fakeSupervisor{ready: true, services: []spacemanager.ServiceSnapshot{{Name: "core"}, {Name: "web"}}}
 
 	reg := NewRegistry()
 	reg.Register("www", www, func() {})
-	reg.Register("partage", partage, func() {})
+	reg.Register("shop", shop, func() {})
 
 	srv, fp := newMultiTestServer(t, reg)
 
@@ -89,12 +89,12 @@ func TestMultiSpace_TwoSpacesRouteIndependently(t *testing.T) {
 		t.Fatalf("www State = %+v, want the www supervisor's own service list", wwwState)
 	}
 
-	partageState, err := dial("partage").State(context.Background())
+	shopState, err := dial("shop").State(context.Background())
 	if err != nil {
-		t.Fatalf("partage State: %v", err)
+		t.Fatalf("shop State: %v", err)
 	}
-	if len(partageState.Services) != 2 {
-		t.Fatalf("partage State = %+v, want the partage supervisor's own 2 services", partageState)
+	if len(shopState.Services) != 2 {
+		t.Fatalf("shop State = %+v, want the shop supervisor's own 2 services", shopState)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestMultiSpace_UnknownSpace404s(t *testing.T) {
 func TestMultiSpace_UnprefixedRequestAmbiguousWith2Spaces404s(t *testing.T) {
 	reg := NewRegistry()
 	reg.Register("www", &fakeSupervisor{ready: true}, func() {})
-	reg.Register("partage", &fakeSupervisor{ready: true}, func() {})
+	reg.Register("shop", &fakeSupervisor{ready: true}, func() {})
 	srv, fp := newMultiTestServer(t, reg)
 
 	// A client that never calls WithSpace sends bare (unprefixed) routes.
@@ -210,7 +210,7 @@ func TestMultiSpace_MaterializesUnknownSpaceOnDemand(t *testing.T) {
 
 // TestMultiSpace_OtherRoutesDoNotMaterialize proves State/Down against a
 // space reg has never seen 404 WITHOUT ever calling materialize — only Apply
-// (the first-deploy case, apps/sklp/sklet/agent.go's AddSpace doc) should
+// (the first-deploy case, sklet/agent.go's AddSpace doc) should
 // bring an unknown space up. A materialize on any other route means a typo
 // in `sklp deploy delete -space <name>` (or ps/logs/exec/restart) silently
 // CREATES an empty space instead of failing loudly — reproduced live on

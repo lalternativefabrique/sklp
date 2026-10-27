@@ -66,7 +66,7 @@ name: test
 steps:
   - name: image
     kind: publish
-    image: rg.fr-par.scw.cloud/skalpai/core:1
+    image: rg.fr-par.scw.cloud/acme/core:1
 `
 	taskPath := writePipelineTask(t, dir, yaml)
 	// Isolate from the developer's own registries file so the missing-
@@ -104,7 +104,7 @@ name: test
 steps:
   - name: image
     kind: publish
-    image: rg.fr-par.scw.cloud/skalpai/core:1
+    image: rg.fr-par.scw.cloud/acme/core:1
 `
 	taskPath := writePipelineTask(t, dir, yaml)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

@@ -24,13 +24,13 @@ import (
 func TestCompilePipeline_ExplicitInputsWinOverScope(t *testing.T) {
 	repo := t.TempDir()
 	mustWrite(t, filepath.Join(repo, "go.mod"), "module x\n")
-	mustWrite(t, filepath.Join(repo, "apps", "core", "main.go"), "package main\n")
+	mustWrite(t, filepath.Join(repo, "services", "api", "main.go"), "package main\n")
 
 	p := Pipeline{
 		Version: 1,
 		Kind:    "pipeline",
 		Scopes: map[string][]string{
-			"backend": {"apps/core/**"},
+			"backend": {"services/api/**"},
 		},
 		Steps: []Step{{
 			Name:   "build",
@@ -53,15 +53,15 @@ func TestCompilePipeline_ExplicitInputsWinOverScope(t *testing.T) {
 
 func TestCompilePipeline_ScopeBecomesImplicitInputs(t *testing.T) {
 	repo := t.TempDir()
-	mustWrite(t, filepath.Join(repo, "apps", "core", "main.go"), "package main\n")
-	mustWrite(t, filepath.Join(repo, "apps", "core", "util.go"), "package main\n")
+	mustWrite(t, filepath.Join(repo, "services", "api", "main.go"), "package main\n")
+	mustWrite(t, filepath.Join(repo, "services", "api", "util.go"), "package main\n")
 	mustWrite(t, filepath.Join(repo, "README.md"), "ignored\n")
 
 	p := Pipeline{
 		Version: 1,
 		Kind:    "pipeline",
 		Scopes: map[string][]string{
-			"backend": {"apps/core/**"},
+			"backend": {"services/api/**"},
 		},
 		Steps: []Step{{
 			Name:  "build",
@@ -76,7 +76,7 @@ func TestCompilePipeline_ScopeBecomesImplicitInputs(t *testing.T) {
 	}
 	got := append([]string(nil), pl.CI.Steps[0].ResolvedInputs...)
 	sort.Strings(got)
-	want := []string{"apps/core/main.go", "apps/core/util.go"}
+	want := []string{"services/api/main.go", "services/api/util.go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("scope-implicit inputs wrong: got %v, want %v", got, want)
 	}
@@ -84,7 +84,7 @@ func TestCompilePipeline_ScopeBecomesImplicitInputs(t *testing.T) {
 
 func TestCompilePipeline_NoScopeNoInputsResolvesEmpty(t *testing.T) {
 	repo := t.TempDir()
-	mustWrite(t, filepath.Join(repo, "apps", "core", "main.go"), "package main\n")
+	mustWrite(t, filepath.Join(repo, "services", "api", "main.go"), "package main\n")
 
 	p := Pipeline{
 		Version: 1,
@@ -106,14 +106,14 @@ func TestCompilePipeline_NoScopeNoInputsResolvesEmpty(t *testing.T) {
 
 func TestCompilePipeline_MultiScopeUnionsGlobs(t *testing.T) {
 	repo := t.TempDir()
-	mustWrite(t, filepath.Join(repo, "apps", "core", "main.go"), "go\n")
+	mustWrite(t, filepath.Join(repo, "services", "api", "main.go"), "go\n")
 	mustWrite(t, filepath.Join(repo, "shared", "x.go"), "go\n")
 
 	p := Pipeline{
 		Version: 1,
 		Kind:    "pipeline",
 		Scopes: map[string][]string{
-			"backend": {"apps/core/**"},
+			"backend": {"services/api/**"},
 			"shared":  {"shared/**"},
 		},
 		Steps: []Step{{
@@ -129,7 +129,7 @@ func TestCompilePipeline_MultiScopeUnionsGlobs(t *testing.T) {
 	}
 	got := append([]string(nil), pl.CI.Steps[0].ResolvedInputs...)
 	sort.Strings(got)
-	want := []string{"apps/core/main.go", "shared/x.go"}
+	want := []string{"services/api/main.go", "shared/x.go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("multi-scope union wrong: got %v, want %v", got, want)
 	}
@@ -286,7 +286,7 @@ steps:
 // stores, and vendored sources under node_modules must not key the cache.
 func TestResolveInputGlobs_SymlinkLoopsAndStoresPruned(t *testing.T) {
 	repo := t.TempDir()
-	mustWrite(t, filepath.Join(repo, "apps", "core", "api.go"), "package core\n")
+	mustWrite(t, filepath.Join(repo, "services", "api", "api.go"), "package core\n")
 	mustWrite(t, filepath.Join(repo, "node_modules", "pkg", "vendored.go"), "package pkg\n")
 
 	// pnpm-style circular symlink: .pnpm-store/v11/links/loop -> repo root.
@@ -306,7 +306,7 @@ func TestResolveInputGlobs_SymlinkLoopsAndStoresPruned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	want := []string{"apps/core/api.go"}
+	want := []string{"services/api/api.go"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}

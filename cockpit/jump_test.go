@@ -23,7 +23,7 @@ func TestJumpEmptyQueryMatchesNothing(t *testing.T) {
 func TestJumpMatchesSpaceAndService(t *testing.T) {
 	m := &Model{Spaces: []Space{
 		{Name: "shop", Services: []Service{{Name: "api"}, {Name: "worker"}}},
-		{Name: "altfab", Services: []Service{{Name: "api"}}},
+		{Name: "acme", Services: []Service{{Name: "api"}}},
 	}}
 	m.OpenJump()
 	for _, r := range "api" {
@@ -33,7 +33,7 @@ func TestJumpMatchesSpaceAndService(t *testing.T) {
 	if len(hits) != 2 {
 		t.Fatalf("both spaces' 'api' service should match, got %d: %+v", len(hits), hits)
 	}
-	if hits[0].label != "shop › api" || hits[1].label != "altfab › api" {
+	if hits[0].label != "shop › api" || hits[1].label != "acme › api" {
 		t.Fatalf("unexpected labels: %q, %q", hits[0].label, hits[1].label)
 	}
 }

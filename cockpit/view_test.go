@@ -613,7 +613,7 @@ func TestLogsPaneKeepsItsWidthAgainstALongCockpitLine(t *testing.T) {
 	m := &Model{
 		Spaces: []Space{{
 			Name:        "sklp-dev-71ed3254bb55",
-			Repo:        "/home/u/code/projects/partage",
+			Repo:        "/home/u/code/projects/shop",
 			LimitedInfo: true,
 			Containers:  5,
 			Volumes:     []string{"_anon-POSTGRES-VAR_LIB_POSTGRESQL_DATA"},
@@ -866,12 +866,12 @@ func TestRenderSingleNodeHasNoHeadingOrColumn(t *testing.T) {
 func TestRenderGroupsSpacesByNode(t *testing.T) {
 	spaces := []Space{
 		{Name: "alpha", LimitedInfo: true, Status: "running", Containers: 1},
-		{Name: "production", Node: "altfab-vm", LimitedInfo: true, Status: "running", Containers: 2},
+		{Name: "production", Node: "acme-vm", LimitedInfo: true, Status: "running", Containers: 2},
 	}
 	f := &fakeRenderer{}
 	out := Render(&Model{Spaces: spaces, Host: rollup(spaces)}, f)
 
-	if !strings.Contains(out, "NODE · local") || !strings.Contains(out, "NODE · altfab-vm") {
+	if !strings.Contains(out, "NODE · local") || !strings.Contains(out, "NODE · acme-vm") {
 		t.Fatalf("both node headings must appear:\n%s", out)
 	}
 	if len(f.tables) < 2 {
@@ -894,7 +894,7 @@ func TestRenderGroupsSpacesByNode(t *testing.T) {
 // must still mark the right row in the right group.
 func TestRenderGroupsSelectionSurvivesInterleavedNodes(t *testing.T) {
 	spaces := []Space{
-		{Name: "production", Node: "altfab-vm", LimitedInfo: true, Status: "running"},
+		{Name: "production", Node: "acme-vm", LimitedInfo: true, Status: "running"},
 		{Name: "production", LimitedInfo: true, Status: "running"}, // local, sorts after by name-tie insertion order
 	}
 	m := &Model{Spaces: spaces, Host: rollup(spaces), Selected: 1}
