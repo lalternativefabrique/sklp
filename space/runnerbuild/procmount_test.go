@@ -100,7 +100,7 @@ func TestGorootFallbackIgnoresGoComplaintOnStdout(t *testing.T) {
 	}
 
 	out, err := exec.Command("/bin/sh", "-c",
-		"export PATH="+filepath.Join(root, "bin")+":$PATH; "+
+		"unset GOROOT; export PATH="+filepath.Join(root, "bin")+":$PATH; "+
 			gorootFallbackExport+"echo \"GOROOT=[$GOROOT]\"").CombinedOutput()
 	if err != nil {
 		t.Fatalf("fallback script failed: %v\n%s", err, out)
