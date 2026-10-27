@@ -1,0 +1,557 @@
+{
+  "$defs": {
+    "CacheEntry": {
+      "description": "CacheEntry describes one persisted directory.",
+      "properties": {
+        "key": {
+          "description": "Key is the cache identity. Same key across runs = volume reused.\nSupports `{{ checksum \"<file>\" }}` to mix file contents into the\nkey (cache invalidated when lockfiles change).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path is the in-container directory to persist. Absolute, or\nrelative to /workspace.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "key"
+      ],
+      "type": "object"
+    },
+    "ExtendsList": {
+      "description": "ExtendsList accepts either a single string or a list of strings in YAML.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "Ready": {
+      "description": "Ready is the readiness probe for a Service.",
+      "properties": {
+        "file": {
+          "description": "File is a path that must exist on disk (Unix socket, pid file).",
+          "type": "string"
+        },
+        "http": {
+          "description": "HTTP is a URL polled with GET; any 2xx response means ready.",
+          "type": "string"
+        },
+        "log": {
+          "description": "Log is a regex matched line-by-line against the service's\nstdout/stderr. First match = ready.",
+          "type": "string"
+        },
+        "tcp": {
+          "description": "TCP is a host:port string opened with net.DialTimeout.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Timeout caps the wait. Default 30s applied by the supervisor\nwhen zero. Format: Go duration string (\"30s\", \"2m\").",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "RegistryCredential": {
+      "description": "RegistryCredential is one host's entry in a pipeline `registries:` block.",
+      "properties": {
+        "password": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "username",
+        "password"
+      ],
+      "type": "object"
+    },
+    "RequireBlock": {
+      "description": "RequireBlock declares pipeline-level preconditions.",
+      "properties": {
+        "branches": {
+          "description": "Branches lists git branch names allowed to run this pipeline.\nEmpty / omitted = no branch restriction. The check shells out\nto `git rev-parse --abbrev-ref HEAD` against RepoPath.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "clean_tree": {
+          "description": "CleanTree, when true, refuses the run if `git status --porcelain`\nreturns any output (unstaged changes OR untracked files).",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "ScanConfigYAML": {
+      "description": "ScanConfigYAML is the YAML-facing shape of a `kind: publish` step's `scan:` field.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "properties": {
+            "ignore_unfixed": {
+              "description": "IgnoreUnfixed mirrors Trivy's --ignore-unfixed. Pointer so the\ncompiler can default it to true on omission without losing an\nexplicit `false`.",
+              "type": "boolean"
+            },
+            "severity": {
+              "description": "Severity is the list of Trivy severities that fail the step.\nEmpty (and not Disabled) means apply the default HIGH/CRITICAL.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    "ScopeRef": {
+      "description": "ScopeRef captures the value of Step.Scope, which the user can write in two YAML shapes:",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "Service": {
+      "description": "Service is one long-running process managed by `sklp dev`.",
+      "properties": {
+        "command": {
+          "description": "Command overrides the image's default CMD. Slice form so\narguments with spaces don't get re-split. Only with Image.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "depends_on": {
+          "description": "DependsOn names other services that must reach Ready before\nthis one is launched. Cycles are rejected at validation time.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Env overlays on top of the pipeline-level Env + EnvFiles for\nthis service only.",
+          "type": "object"
+        },
+        "image": {
+          "description": "Image, when set, marks this service as an OCI container managed\nnatively by sklp (via docker / podman / nerdctl auto-detected on\nPATH). Mutually exclusive with Run. The full reference is\npassed verbatim to the runtime — `postgres:16-alpine`,\n`rg.fr-par.scw.cloud/skaplai/foo:v1.2.3`, etc.",
+          "type": "string"
+        },
+        "network": {
+          "description": "Network selects the network namespace for an `image:` service:\n\n  - \"bridge\" — the supervisor attaches the container to a\n    run-scoped bridge network created on demand (`sklp-dev-<id>`\n    or `sklp-ci-<id>`). Services are reached by their name as DNS\n    on the bridge (`postgres:5432`); steps address them by\n    name:port, never via a host-port env map. Required for running\n    multiple `sklp dev` / `sklp run ci` invocations in parallel on\n    the same host.\n  - \"host\" — legacy: the container shares the host network\n    namespace (`--network host`). `ports:` are ignored. Hard-\n    codes port numbers and prevents parallel runs on the same\n    host. Emits a deprecation warning when selected (or when no\n    value is provided and the supervisor falls back to host for\n    compatibility); will be removed once in-repo dev.yaml files\n    have migrated to bridge.\n\nEmpty means: defer to the supervisor's current default (host for\nnow, bridge after the migration PR lands). Ignored for `run:`\nservices.",
+          "type": "string"
+        },
+        "oneshot": {
+          "description": "Oneshot marks a process expected to run to completion (exit 0)\nbefore its dependents start, rather than staying alive for the\nwhole stack lifetime. Typical use: schema migrations\n(`go run . migrate up`, `prisma migrate deploy`, `alembic\nupgrade head`). Exit 0 = \"ready\" (= \"done\") and unblocks\n`depends_on` chains; exit ≠ 0 fails the whole stack.\n\nOneshot services ignore Ready: they signal readiness via their\nexit, not via a probe.",
+          "type": "boolean"
+        },
+        "optional": {
+          "description": "Optional services are skipped by default; opt-in via a future\n`--with <name>` flag. Lets `dev.yaml` declare the full stack\n(e.g. an OTEL collector) without forcing every contributor to\nrun it.",
+          "type": "boolean"
+        },
+        "port": {
+          "description": "Port is the container port the service listens on — the single source\nof truth. It drives host-mux exposure AND lets `ready.http` be written\nas a bare path (`/health`), composed onto `http://localhost:<port>`.\nWhen unset, the port is inferred from an absolute `ready.http` URL for\nbackward compatibility. Declaring `port:` is the supported form.",
+          "type": "integer"
+        },
+        "ports": {
+          "description": "Ports maps host:container or :container (auto host port). Only\nhonoured when Image is set. Examples: `5432:5432`, `:8080`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "ready": {
+          "$ref": "#/$defs/Ready",
+          "description": "Ready describes how the supervisor knows the service is up.\nEmpty = launch-and-forget (no gating for downstream services)."
+        },
+        "run": {
+          "description": "Run is the shell command executed via `sh -c`. Mutually\nexclusive with Image: a service is EITHER a shell command (run)\nOR a container (image).",
+          "type": "string"
+        },
+        "volumes": {
+          "description": "Volumes lists named or bind mounts. Only honoured with Image.\nExamples: `pg-data:/var/lib/postgresql/data`, `./data:/data:ro`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workdir": {
+          "description": "Workdir is the directory the command runs in, relative to the\nrepo root. Empty = repo root. Ignored for Image services.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "description": "Step is one shell command (or block) inside a pipeline.",
+      "properties": {
+        "build_args": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "BuildArgs lists `--build-arg KEY=VALUE` entries for a\n`kind: publish` step. Values pass through the pipeline\ntemplate engine (env vars + `{{ publish_tag }}`-style\nplaceholders) before reaching the builder. Non-secret only —\nbuild args end up in the image's history; use BuildSecrets for\nanything sensitive. Ignored for non-publish steps.",
+          "type": "object"
+        },
+        "build_contexts": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "BuildContexts maps a BuildKit additional-context name to a source\nreference, one per `--build-context <name>=<value>` entry the\nbuilder honours. The source may be:\n\n  - a local directory (relative to the build context root or\n    absolute) — its contents are folded into the step's cache key\n  - `docker-image://<ref>` — the image ref (incl. tag/digest) is\n    folded verbatim into the cache key\n  - `target:<stage>` — a named stage in the same Dockerfile, no\n    cache impact beyond the Dockerfile already being hashed\n  - a git URL (`https://...git#ref`) or OCI layout — ref folded\n    verbatim\n\nThe value is treated as opaque by sklp: the builder parses it and\nreturns a clean error on a bad ref. Ignored for non-publish\nsteps. (Issue #445.)",
+          "type": "object"
+        },
+        "cache": {
+          "description": "Cache opts a step OUT of the step cache. Modeled as a pointer so\nYAML omission is distinguishable from an explicit `cache: false`\n— the default is cache: true.\n\nSet it false on a step whose result is NOT a function of its\ndeclared inputs because it mutates state living outside the repo:\na migration that resets a live database, a fixture loader, a step\nthat publishes to an external system. Replaying such a step from\nthe cache skips the mutation while reporting success, so the next\nstep runs against state the cache silently assumed was there.\n\nPure steps (compile, lint, test) must stay cacheable — this is an\nescape hatch for external effects, not a way to force a re-run.",
+          "type": "boolean"
+        },
+        "context": {
+          "description": "Context is the build context directory, relative to the\nrepo root. Required for `kind: publish`. Ignored otherwise.",
+          "type": "string"
+        },
+        "cwd": {
+          "description": "Cwd is the working directory the step runs in, relative to the\nrepo root. Empty means run at the repo root. The path is cleaned\nand rejected at compile time if it escapes the repo root.",
+          "type": "string"
+        },
+        "depends_on": {
+          "description": "DependsOn lists names of other steps in the same pipeline that\nMUST complete successfully before this step runs. When unset on\nevery step in a pipeline, the compiler treats the declared order\nas an implicit linear chain. When at least one step declares it,\nthe compiler builds an explicit DAG: any step without DependsOn\nis a root, ordering between independent steps is lexicographic.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dockerfile": {
+          "description": "Dockerfile is the path to the Dockerfile, relative to the repo\nroot. Defaults to `<context>/Dockerfile`. Ignored for shell steps.",
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Env merges into the pipeline-level Env for this step only.",
+          "type": "object"
+        },
+        "filesystem": {
+          "description": "Filesystem selects the filesystem isolation policy for this step.\nThe default (empty) is \"confined\": the step may read/write the\nrepo, /tmp and its secret dir, read system/toolchain paths, and\neverything else (notably $HOME — ~/.ssh, ~/.aws, …) is denied via\nLandlock on Linux. The only recognised non-empty value is \"open\",\nwhich disables confinement (host-wide FS access). On macOS or on\nkernels without Landlock the field is accepted and the step runs\nwithout FS confinement (logged), never failing for that reason.",
+          "type": "string"
+        },
+        "if": {
+          "description": "If is NOT supported. Conditional step execution is intentionally\nnot a feature: a non-empty value is rejected at compile time with a\nmessage pointing at the alternative (a shell test inside `run:`).\nThe field is kept in the schema only so the rejection can name it\nprecisely instead of failing as an unknown key. Do not gate steps\nwith `if:` — gate behaviour from within the command.",
+          "type": "string"
+        },
+        "image": {
+          "description": "Image is the registry reference produced by a `kind: publish`\nstep (without the tag). Ignored for plain shell steps.",
+          "type": "string"
+        },
+        "inputs": {
+          "description": "Inputs lists doublestar globs (relative to repo root) whose\ncontent is folded into this step's cache key. Editing a file\nmatched by a glob invalidates the step (and its descendants);\nediting a file outside every step's inputs does not. Empty =\nthe step's key ignores the working tree entirely.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "description": "Kind selects the step shape. Empty (the default) means a plain\nshell step driven by Run. \"publish\" is a first-class wrapper that\nbuilds an image, scans it with Trivy, and pushes it as one\ncacheable unit — fully daemonless (no Docker); the Image / Tag /\nContext / Dockerfile / Push / Scan fields configure it. Adding new\nkinds requires bumping plan.SchemaVersion so old cached plans\ncannot be misinterpreted.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name is a human label surfaced in the run log. Required.",
+          "type": "string"
+        },
+        "network": {
+          "description": "Network selects the network isolation policy for this step. The\nonly recognised non-empty value today is \"none\", which asks the\nin-process sandbox to unshare the network namespace on Linux. On\nmacOS the field is accepted and logged as a no-op.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "Outputs lists literal paths (relative to repo root, NOT globs)\nthe step produces. On a successful run they are copied into the\nrepo-local content-addressed store; on a cache hit they are\nrestored from the store before downstream steps run. Empty =\nno output capture.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "platform": {
+          "description": "Platform is the os/arch a `kind: publish` step builds for\n(`linux/amd64` or `linux/arm64`). The base image is pulled for\nthat platform, the image is labelled with it, and RUN steps of a\nforeign platform execute through the host's binfmt qemu-user\nhandler, as `docker build --platform` does. Defaults to the\nbuild host's platform. Ignored for non-publish steps.",
+          "type": "string"
+        },
+        "push": {
+          "description": "Push is the opt-out switch for the push phase of a publish\nstep. Modeled as a pointer so YAML omission is distinguishable\nfrom an explicit `push: false` — the default is push: true.",
+          "type": "boolean"
+        },
+        "run": {
+          "description": "Run is the shell snippet executed via `sh -c`. Multi-line YAML\nscalars are supported and forwarded verbatim. Required for the\ndefault (shell) step kind; OPTIONAL for `kind: publish`,\nwhich is driven by Image / Dockerfile / Context instead. The\nvalidator that catches \"shell step without run\" lives in the\npipeline compiler — the JSON schema stays permissive to allow\nnon-shell kinds, so the `,omitempty` tag is on purpose.",
+          "type": "string"
+        },
+        "scan": {
+          "$ref": "#/$defs/ScanConfigYAML",
+          "description": "Scan configures the Trivy scan phase. Modeled as RawNode so the\nYAML may be either `scan: false` (full opt-out), an absent key\n(defaults applied: severity HIGH/CRITICAL, ignore_unfixed true),\nor a `scan: { severity: [...], ignore_unfixed: bool }` mapping."
+        },
+        "scope": {
+          "$ref": "#/$defs/ScopeRef",
+          "description": "Scope names one or more entries from Pipeline.Scopes. When set,\nthe step runs only if at least one file changed in the current\nrun matches one of the named scopes' globs. Empty = the step\nalways runs.\n\nMultiple scopes form an OR: `scope: [a, b]` runs when a OR b\nhas changed files. The custom unmarshaler in schema_scope.go\naccepts both scalar and list YAML forms."
+        },
+        "secrets": {
+          "$ref": "#/$defs/StepSecrets",
+          "description": "Secrets restricts which of Pipeline.Secrets are exposed to this\nstep (shell step shape), OR declares BuildKit `--secret id=...`\nentries for a `kind: publish` step. The custom YAML\nunmarshaller (schema_publish.go) accepts:\n\n  secrets: [ FOO, BAR ]                       # shell step\n  secrets:                                    # publish\n    - id: github_token\n      env: GITHUB_TOKEN\n    - id: npmrc\n      file: ~/.npmrc\n\nnil means \"no secret exposed\" — secrets are opt-in per step to\nkeep the blast radius of any single `run:` snippet small."
+        },
+        "services": {
+          "description": "Services lists the names of Pipeline.Services this step requires.\nEach entry must match a key in Pipeline.Services (validated at\nload time). When the step runs in a K8s pod, the named services\nare materialised as sidecar containers in the same Pod so the\nstep can reach them on localhost:<port>.\n\nThis field is currently ignored by every backend except K8s: a\nlog line is emitted listing the requested service names so the\noperator can see the intent, but no container is started. K8s\nis the only backend that injects sidecars in v1.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tag": {
+          "description": "Tag is the image tag for a `kind: publish` step. Literal\nstrings or `$VAR` env interpolations only — the full template\nengine (issue #413) is not wired yet. Ignored for shell steps.",
+          "type": "string"
+        },
+        "tools": {
+          "description": "Tools, when set, restricts the tools resolved for this step to\nthe listed subset of the effective toolchain (pipeline `tools:`\nmerged with config `runner.toolchain`). When unset, the step\ninherits every tool in that effective toolchain (the full env).\nEach entry must be a key of the effective toolchain, otherwise\nthe executor fails with a clear error before running the step.\n\nCombined with scope gates, this is what makes tool installs\nlazy: a backend-only PR never resolves node/pnpm/bun because the\nfrontend steps that need them are skipped before their tools are\ntouched.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "StepSecrets": {
+      "description": "StepSecrets is the polymorphic YAML shape for a step's `secrets:` field.",
+      "oneOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "env": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      ]
+    },
+    "TagBlock": {
+      "description": "TagBlock declares how the publish tag is computed.",
+      "properties": {
+        "strategy": {
+          "description": "Strategy selects a built-in tag format. Recognised values:\n\"date-sha\" (default shape), \"sha\", \"date\". Mutually exclusive\nwith Template.",
+          "type": "string"
+        },
+        "template": {
+          "description": "Template is the escape hatch: a literal string whose `{{ name }}`\nplaceholders are substituted with the corresponding git-derived\nvalue. Mutually exclusive with Strategy.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "TriggerBlock": {
+      "description": "TriggerBlock declares where a pipeline may run.",
+      "properties": {
+        "branches": {
+          "description": "Branches lists glob patterns matched against the current branch,\nin order, with a \"!\" prefix negating. Later patterns win, so\n['**', '!main'] reads as \"every branch except main\".\n\nIt gates selection AND execution: a push on a branch matching no\npattern does not select the pipeline, and `sklp run <name>` from\nthat same branch is refused rather than silently running.\n\nAn empty or omitted list means every branch. A pipeline that must\nnever be selected on its own declares the branches it is allowed\nto run on and nothing else — publish says [main], so a merge\ncannot start it while a hand-run from main still works.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "clean_tree": {
+          "description": "CleanTree, when true, refuses the run if `git status --porcelain`\nreports anything (unstaged changes or untracked files). An image\nbuilt from uncommitted work is reproducible from no commit.",
+          "type": "boolean"
+        },
+        "except": {
+          "description": "Except is the pre-branches spelling of a negated pattern list.\nDeprecated: write branches: ['**', '!main'].",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "never": {
+          "description": "Never is the pre-branches spelling of \"not selectable by a push\".\nDeprecated: write the branches the pipeline may run on instead.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/lalternativefabrique/sklp/main/pipeline/pipeline.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Schema for sklp pipeline files (.sklp/pipelines/*.yaml) generated from the Go Pipeline struct.",
+  "properties": {
+    "cache": {
+      "description": "Cache declares directories whose content is persisted between\nruns of the same project. The key may contain `{{ checksum\n\"path\" }}` templating; cache miss = empty volume, cache hit =\nprevious run's content.",
+      "items": {
+        "$ref": "#/$defs/CacheEntry"
+      },
+      "type": "array"
+    },
+    "defaults": {
+      "type": "object"
+    },
+    "description": {
+      "type": "string"
+    },
+    "env": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Env adds non-secret environment variables to every Step. Values\nare plain strings; templating is not interpreted at parse time.",
+      "type": "object"
+    },
+    "env_files": {
+      "description": "EnvFiles lists dotenv-style files loaded into the runner's\nprocess environment before anything else runs. For `kind:\npipeline`, values are visible to require: evaluation, tag:\nresolution, step env composition, and\nBuildKit secret resolution. For `kind: devstack`, files also feed\neach Service's env layer before the per-service Env overlay.\n\nPaths are repo-root-relative. Missing files are silently skipped\n(a `.env.local` that doesn't exist is fine). Within the list,\nlast file wins on key collision. Host env always wins over file\ncontent — a CI runner that explicitly sets GITHUB_TOKEN is never\noverridden by a checked-in `.env`.\n427: env_files for kind: pipeline",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "extends": {
+      "$ref": "#/$defs/ExtendsList",
+      "description": "Extends names other files in the same .sklp/tasks/ directory whose\ncontent should be merged into this Pipeline before execution.\nAccepts a single string or a list of strings (resolved by the\ncustom YAML unmarshaller below)."
+    },
+    "inputs": {
+      "type": "object"
+    },
+    "jobs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Service"
+      },
+      "description": "Jobs declares run-once-to-completion tasks (migration, seed, one-off\nsetup) managed by `sklp dev`, a SEPARATE typed family from Services\n(mirrors deploy's services/jobs split, k8s Deployment vs Job). A job is\nfolded into the service set with Oneshot=true: exit 0 IS its ready signal,\ndependents gate on its completion, and the supervisor never treats its\nexit as a crash. Only consulted when Kind == \"devstack\"; names must be\nunique across Services and Jobs.",
+      "type": "object"
+    },
+    "kind": {
+      "description": "Kind selects the executor: \"pipeline\" (runs Steps) or \"devstack\".\nThe legacy \"task\" (runtask) executor has been removed; a contract\nthat is not kind: pipeline is rejected by Run with an explicit\nerror. Empty is treated as a non-pipeline kind (and therefore\nrejected) — author contracts as kind: pipeline. (\"publish\" is a\nstep Kind, not a pipeline Kind — see Step.Kind.)",
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "on": {
+      "$ref": "#/$defs/TriggerBlock",
+      "description": "On declares which branches a push may select this pipeline on.\n\nThis answers a different question from require.branches. That one is a\nguard: where the pipeline is ALLOWED to run at all, checked at run time\nand refusing the run when it does not hold. This one is a trigger: where\na push should START it on its own. publish is allowed to run only on\nmain and must never be started by a push, so it needs to say both — one\nfield cannot carry the two.\n\nOmitted means \"every branch\", which is what an unrestricted CI pipeline\nwants. An explicit empty Except list is still \"every branch\"; a pipeline\nthat must never be selected declares `on: {never: true}` and is started\nby name only."
+    },
+    "registries": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RegistryCredential"
+      },
+      "description": "Registries declares one push credential per registry host, in the\nshape a deploy.yaml uses. Read only on a CI node (SKLP_CI / CI=true),\nwhere no interactive `sklp registry login` exists: the password is\nwritten as ${VAR} and resolved from the run's environment. A dev\nmachine ignores the block and pushes with its own login.",
+      "type": "object"
+    },
+    "require": {
+      "$ref": "#/$defs/RequireBlock",
+      "description": "412: require block — declarative preconditions evaluated by the\nengine BEFORE any step compiles or runs. Omit entirely to keep\ntoday's default (no preconditions). See RequireBlock for fields."
+    },
+    "rules": {
+      "items": {},
+      "type": "array"
+    },
+    "runner": {
+      "description": "Runner selects the container image used by DockerSpawner. Empty\nmeans \"base\". Recognised values are \"base\", \"ops\", or any full\nimage reference starting with the canonical registry root.",
+      "type": "string"
+    },
+    "scopes": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": "Scopes maps a logical name to a list of doublestar globs. A step\nreferencing a scope (via Step.Scope) only runs when at least one\nchanged file in the current run matches one of the scope's globs.\n\nDeclared once at the pipeline level, reused by N steps. The user\nexpresses the dependency between \"this part of the codebase\" and\n\"these steps\" instead of duplicating glob lists step by step.\n\nA pipeline without `scopes:` has no skip logic — every step runs.\nThat matches mono-service repos where every PR touches the\n(single) service by definition.",
+      "type": "object"
+    },
+    "secrets": {
+      "description": "Secrets lists logical secret names that must exist in the\nproject's secret store. The runner resolves them at spawn time\nand mounts them at /run/secrets/<NAME> + exports them as env vars.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "service_map": {
+      "type": "object"
+    },
+    "services": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Service"
+      },
+      "description": "Services declares the long-running processes managed by\n`sklp dev`. Only consulted when Kind == \"devstack\". Map key is\nthe service name surfaced in the prefixed log mux ([api ], …).",
+      "type": "object"
+    },
+    "space": {
+      "description": "Space, when set to false, disables the Space sandbox: the pipeline runs\ndirectly on the host instead of inside a Space container. Use for\npipelines that need host-level access (e.g. publish steps with runc).",
+      "type": "boolean"
+    },
+    "steps": {
+      "description": "Steps are the ordered shell commands to execute. v1 is sequential\nwith no fan-out; matrix and parallel come later behind their own\nfields.",
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "type": "array"
+    },
+    "tag": {
+      "$ref": "#/$defs/TagBlock",
+      "description": "413: tag block ---------------------------------------------------\n\nTag, when set, declares a deterministic publish-tag strategy. The\nresolved tag is computed ONCE at compile time, exported to every\nstep as $SKLP_PUBLISH_TAG, and substituted into `{{ publish_tag }}`\nplaceholders in step Run and Env values. When Tag is nil, the\npipeline behaves exactly as before: no env var, no substitution."
+    },
+    "targets": {
+      "type": "object"
+    },
+    "tasks": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "tools": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Tools maps tool name -> exact version, overriding or extending the\nrunner config's `runner.toolchain` (config.yaml). The effective\ntoolchain a run sees is the UNION of the two: config defines the\nexecution env, the pipeline may pin a different version or add a\ntool. A pipeline entry with an empty version inherits the config\npin. Installed by sklp before the first Step runs. Resolution\norder: native registry, then skt. Versions must be semver\nor a documented skt tag; \"latest\" / \"lts\" are rejected.",
+      "type": "object"
+    },
+    "version": {
+      "description": "Version pins the schema; 1 is the only valid value today.",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "title": "sklp pipeline",
+  "type": "object"
+}

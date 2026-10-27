@@ -1,0 +1,61 @@
+version: 1
+kind: pipeline
+name: secops
+description: Built-in security scans shipped with sklp (gitleaks, govulncheck, pnpm audit, trivy misconfig).
+
+tools:
+  go: "1.26.9"
+  node: "22.19.0"
+  pnpm: "10.27.0"
+  gitleaks: "8.18.4"
+  trivy: "0.70.0"
+  govulncheck: "1.1.4"
+
+scopes:
+  go-code: ["**/*.go", "go.work", "go.work.sum", "**/go.mod", "**/go.sum"]
+  ts-code: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx", "**/package.json", "pnpm-lock.yaml"]
+  shared: [".sklp/**", "Dockerfile*", "**/Dockerfile*", "infra/**"]
+
+steps:
+  - name: gitleaks
+    tools: [gitleaks]
+    run: |
+      set -eu
+      set -- --source . --no-banner --redact --exit-code 1
+      [ -f .gitleaks.toml ] && set -- "$@" --config .gitleaks.toml
+      if git rev-parse --verify -q origin/main >/dev/null && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+        set -- "$@" --log-opts=origin/main..HEAD
+      fi
+      gitleaks detect "$@"
+
+  # govulncheck loads packages through the toolchain: without `go` provisioned,
+  # a cold cache fails with "package unsafe is not in std".
+  - name: govulncheck
+    scope: [go-code]
+    tools: [go, govulncheck]
+    run: |
+      set -eu
+      status=0
+      for mod in $(find . -name go.mod -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path './tmp/*' | sort); do
+        dir=$(dirname "$mod")
+        echo "== govulncheck $dir"
+        govulncheck -C "$dir" ./... || status=1
+      done
+      exit $status
+
+  - name: pnpm-audit
+    scope: [ts-code]
+    tools: [node, pnpm]
+    run: |
+      set -eu
+      [ -f pnpm-lock.yaml ] || { echo "no pnpm-lock.yaml, skipped"; exit 0; }
+      pnpm audit --audit-level=high --prod
+
+  - name: trivy-misconfig
+    scope: [shared, go-code, ts-code]
+    tools: [trivy]
+    run: |
+      set -eu
+      set -- --scanners misconfig --severity HIGH,CRITICAL --skip-dirs node_modules --exit-code 1
+      [ -f .trivyignore.yaml ] && set -- "$@" --ignorefile .trivyignore.yaml
+      trivy fs "$@" .

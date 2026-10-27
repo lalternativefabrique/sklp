@@ -1,0 +1,6 @@
+# Downloaded helper binaries — fetched by `go generate ./...`, never committed.
+runc
+runc-*
+slirp4netns
+slirp4netns-*
+*.tmp
