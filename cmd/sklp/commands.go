@@ -38,6 +38,7 @@ func rootCommand() cli.Command {
 			flowCommand(),
 			cockpitCommand(),
 			spaceCommand(),
+			agentCommand(),
 			imageCommand(),
 			deployCommand(),
 			gatewayCommand(),
