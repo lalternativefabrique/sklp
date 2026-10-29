@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/lalternativefabrique/sklp/internal/cli"
@@ -56,4 +57,25 @@ func agentCommand() cli.Command {
 			},
 		}},
 	}
+}
+
+// parseSpaceMounts reads agent -mount values, "/host:/space" or "/host:/space:ro".
+// Both sides must be absolute and the host side must exist: a missing
+// source would otherwise be created empty by the runtime, hiding a typo.
+func parseSpaceMounts(values []string) ([]space.DevMount, error) {
+	mounts := make([]space.DevMount, 0, len(values))
+	for _, v := range values {
+		parts := strings.Split(v, ":")
+		if len(parts) < 2 || len(parts) > 3 || (len(parts) == 3 && parts[2] != "ro" && parts[2] != "rw") {
+			return nil, fmt.Errorf("-mount %q: want /host/path:/space/path[:ro]", v)
+		}
+		if !filepath.IsAbs(parts[0]) || !filepath.IsAbs(parts[1]) {
+			return nil, fmt.Errorf("-mount %q: both paths must be absolute", v)
+		}
+		if _, err := os.Stat(parts[0]); err != nil {
+			return nil, fmt.Errorf("-mount %q: %w", v, err)
+		}
+		mounts = append(mounts, space.DevMount{Source: parts[0], Destination: parts[1], ReadOnly: len(parts) == 3 && parts[2] == "ro"})
+	}
+	return mounts, nil
 }
