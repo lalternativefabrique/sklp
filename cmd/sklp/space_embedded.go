@@ -25,6 +25,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -214,6 +215,8 @@ func spaceUpCommand() cli.Command {
 			{Name: "image", Type: cli.StringFlag, Usage: "open a bare space straight from this OCI image (no recipe / space.yaml needed)"},
 			{Name: "file", Type: cli.StringFlag, Usage: "explicit path to the space recipe (space.yaml); overrides the .sklp lookup"},
 			{Name: "repo", Type: cli.StringFlag, StringDefault: ".", Usage: "project repo holding .sklp/space.yaml"},
+			{Name: "mount", Type: cli.StringSliceFlag, Usage: "bind a host path into the space, repeatable: /host/dir:/in/space[:ro]; a later mount covers an earlier one (/dev/null:/work/.env:ro hides a file)"},
+			{Name: "workdir", Type: cli.StringFlag, Usage: "directory the shell starts in, e.g. a -mount destination"},
 		},
 		Run: func(ctx context.Context, args cli.Args) int {
 			name, ok := firstPositional(args)
@@ -221,11 +224,18 @@ func spaceUpCommand() cli.Command {
 				fmt.Fprintln(os.Stderr, "sklp space up: a space name is required")
 				return 2
 			}
+			mounts, err := parseSpaceMounts(args.StringSlice("mount"))
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "sklp space up:", err)
+				return 2
+			}
 			code, err := spaceMain(ctx, spaceOpts{
-				name:  name,
-				repo:  args.String("repo"),
-				file:  args.String("file"),
-				image: args.String("image"),
+				name:    name,
+				repo:    args.String("repo"),
+				file:    args.String("file"),
+				image:   args.String("image"),
+				mounts:  mounts,
+				workdir: args.String("workdir"),
 			})
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "sklp space up:", err)
@@ -595,6 +605,8 @@ type spaceOpts struct {
 	image     string   // OCI image ref → bare-image mode (no recipe build)
 	buildOnly bool     // recipe mode only: build the rootfs and stop
 	cmd       []string // command to run; empty → interactive shell
+	mounts    []space.DevMount
+	workdir   string // overrides the image's working directory
 }
 
 // spaceMain prepares the space rootfs and (unless buildOnly) runs opts.cmd in it
@@ -679,8 +691,12 @@ func spaceMain(ctx context.Context, opts spaceOpts) (int, error) {
 		interactive = isSpaceTerminal()
 	}
 
+	if opts.workdir != "" {
+		workdir = opts.workdir
+	}
 	ds := space.DeployService{
 		Name:             "shell",
+		DevMounts:        opts.mounts,
 		RootfsDir:        rootfs,
 		RootfsCfg:        space.ImageConfig{Env: bakedEnv, WorkingDir: workdir},
 		Env:              bakedEnv,
@@ -797,4 +813,25 @@ func yesNo(b bool) string {
 		return "yes"
 	}
 	return "no"
+}
+
+// parseSpaceMounts reads -mount values, "/host:/space" or "/host:/space:ro".
+// Both sides must be absolute and the host side must exist: a missing
+// source would otherwise be created empty by the runtime, hiding a typo.
+func parseSpaceMounts(values []string) ([]space.DevMount, error) {
+	mounts := make([]space.DevMount, 0, len(values))
+	for _, v := range values {
+		parts := strings.Split(v, ":")
+		if len(parts) < 2 || len(parts) > 3 || (len(parts) == 3 && parts[2] != "ro" && parts[2] != "rw") {
+			return nil, fmt.Errorf("-mount %q: want /host/path:/space/path[:ro]", v)
+		}
+		if !filepath.IsAbs(parts[0]) || !filepath.IsAbs(parts[1]) {
+			return nil, fmt.Errorf("-mount %q: both paths must be absolute", v)
+		}
+		if _, err := os.Stat(parts[0]); err != nil {
+			return nil, fmt.Errorf("-mount %q: %w", v, err)
+		}
+		mounts = append(mounts, space.DevMount{Source: parts[0], Destination: parts[1], ReadOnly: len(parts) == 3 && parts[2] == "ro"})
+	}
+	return mounts, nil
 }
