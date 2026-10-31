@@ -82,6 +82,7 @@ Verbs:
   auth        Manage CLI authentication: login / status / logout
   issue       Manage project issues from the terminal (list, new, show, edit,
               status, promote, gh-link / gh-close / gh-reopen / gh-unlink)
+  flag        Manage a project's feature flags (list, enable, disable)
   cache       Inspect the repo cache state / collect the CI tool cache
               ('cache status', 'cache gc')
   clean       Free disk space: rebuildable caches + dead runtime state.

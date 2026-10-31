@@ -49,6 +49,7 @@ func rootCommand() cli.Command {
 			whoamiCommand(),
 			agentsMDCommand(),
 			secretCommand(),
+			flagCommand(),
 			ciCommand(),
 			logsCommand(),
 			cacheCommand(),
