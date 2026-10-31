@@ -189,7 +189,7 @@ linux/amd64, linux/arm64 and darwin.
 
 ## Status
 
-**Beta, early access: in a stabilization phase.** `sklp` and `sklet` run the production of the
+**Early access.** `sklp` and `sklet` run the production of the
 company that builds them, on a fleet of plain VMs, with no Kubernetes anywhere.
 The focus now is stabilization rather than new surface: fixing what real
 operation uncovers and widening coverage beyond that one fleet. The contracts
