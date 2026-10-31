@@ -144,6 +144,8 @@ func main() {
 	// normal invocation and off the space-deploy build.
 	maybeRunSpaceNetWorker()
 
+	warnMissingHelpers(os.Stderr)
+
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)

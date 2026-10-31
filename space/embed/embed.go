@@ -42,3 +42,9 @@ func assetSHA256(name string) string {
 	}
 	return ""
 }
+
+// HelpersEmbedded reports whether this binary carries its runc and slirp4netns,
+// which a plain `go build` without `go generate` silently leaves out.
+func HelpersEmbedded() bool {
+	return len(asset("runc-"+runtime.GOARCH)) > 0 && len(asset("slirp4netns-"+runtime.GOARCH)) > 0
+}
