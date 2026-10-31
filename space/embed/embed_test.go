@@ -40,3 +40,9 @@ func TestExtractRuncSlirpFromEmbedded(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpersEmbedded(t *testing.T) {
+	if !HelpersEmbedded() {
+		t.Fatal("helpers missing: run `go generate ./space/embed/`")
+	}
+}
