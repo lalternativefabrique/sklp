@@ -189,11 +189,11 @@ linux/amd64, linux/arm64 and darwin.
 
 ## Status
 
-**Production-ready, in a hardening phase.** `sklp` and `sklet` run the
-production of the company that builds them, on a fleet of plain VMs, with no
-Kubernetes anywhere. The focus now is stabilisation rather than new surface:
-fixing what real operation uncovers and widening coverage beyond that one
-fleet. The contracts are stable; the control API and the mesh are still
+**In a consolidation phase.** `sklp` and `sklet` run the production of the
+company that builds them, on a fleet of plain VMs, with no Kubernetes anywhere.
+The focus now is consolidation rather than new surface: fixing what real
+operation uncovers and widening coverage beyond that one fleet. The contracts
+are stable; the control API and the mesh are still
 evolving. Expect sharp edges in places that only one fleet has exercised, and
 please report them.
 
