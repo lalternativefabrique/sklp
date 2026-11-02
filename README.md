@@ -203,11 +203,15 @@ Build and push times for one small app per stack, `linux/amd64` from an Apple M4
 | `python-django` | Python, Django | 30 s |
 | `php-laravel` | PHP, Laravel | 38 s |
 | `svelte-kit` | Node, SvelteKit | 47 s |
+| `dotnet-aspnet` | C#, ASP.NET Core | 1 min 11 |
 | `go-gin` | Go, Gin | 1 min 52 |
 | `java-spring` | Java, Spring Boot | 1 min 52 |
 | `vue-nuxt` | Node, Nuxt | 2 min 08 |
 | `cpp-crow` | C++, Crow | 2 min 19 |
+| `elixir-phoenix` | Elixir, Phoenix | 2 min 43 |
 | `rust-axum` | Rust, Axum | 3 min 33 |
+| `kotlin-ktor` | Kotlin, Ktor | 5 min 26 |
+| `ruby-rails` | Ruby, Rails | 6 min 14 |
 
 Up to three builds ran at once, with base images already pulled, so read these as
 an order of magnitude rather than a benchmark. `rust-axum` builds on `rust:1-alpine`:
