@@ -98,7 +98,7 @@ func TestKataKernelURLIsPinned(t *testing.T) {
 
 func TestGuestShipsQemuUser(t *testing.T) {
 	got := host.WithPackages(guestExtraPackages)
-	for _, want := range []string{"qemu-user-static", "binfmt-support", "nftables"} {
+	for _, want := range []string{"qemu-user-static", "openssh-client", "nftables"} {
 		if !slices.Contains(got, want) {
 			t.Errorf("guest packages missing %s", want)
 		}

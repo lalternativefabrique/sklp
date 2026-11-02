@@ -23,9 +23,10 @@ const rootfsSizeBytes = 64 << 30
 
 // guestExtraPackages are what the VM needs beyond a deploy host: qemu-user
 // handlers so a publish step can build a foreign platform (an amd64 image on
-// an Apple Silicon Mac). update-binfmts records them at install time; the
-// agent registers them at boot, since binfmt_misc is not mounted in the chroot.
-var guestExtraPackages = []string{"qemu-user-static", "binfmt-support"}
+// an Apple Silicon Mac), registered by the agent at boot from the binfmt.d
+// fragments the package ships; ssh so a pipeline's `git pull` reaches a
+// remote the Mac clones over ssh.
+var guestExtraPackages = []string{"qemu-user-static", "openssh-client"}
 
 // buildRootfs assembles the guest rootfs from the pinned OCI base, installs
 // the tools sklp shells out to, bakes in sklp/skt/the vz agent, and writes an
