@@ -191,6 +191,28 @@ sklp macos status                         # up, down, build
   qemu-user in the guest. It works, and it is slow: a Go build takes minutes.
 - **Memory.** The VM gets 4 GB; `SKLP_VZ_MEMORY_GB=12 sklp macos up` gives it more.
 
+Build and push times for one small app per stack, `linux/amd64` from an Apple M4
+(10 cores, 32 GB, VM on 8 vCPUs and 12 GB), emulated through qemu-user:
+
+| Image | Stack | Time |
+|---|---|---|
+| `bun-hono` | Bun, Hono | 13 s |
+| `node-express` | Node, Express | 16 s |
+| `deno` | Deno | 18 s |
+| `python-fastapi` | Python, FastAPI | 29 s |
+| `python-django` | Python, Django | 30 s |
+| `php-laravel` | PHP, Laravel | 38 s |
+| `svelte-kit` | Node, SvelteKit | 47 s |
+| `go-gin` | Go, Gin | 1 min 52 |
+| `java-spring` | Java, Spring Boot | 1 min 52 |
+| `vue-nuxt` | Node, Nuxt | 2 min 08 |
+| `cpp-crow` | C++, Crow | 2 min 19 |
+| `rust-axum` | Rust, Axum | 3 min 33 |
+
+Up to three builds ran at once, with base images already pulled, so read these as
+an order of magnitude rather than a benchmark. `rust-axum` builds on `rust:1-alpine`:
+glibc's `rustc` crashes under qemu here.
+
 **Setup, for now.** The VM needs a signed `sklp` built on the Mac, plus a guest
 kernel and rootfs image, which are not published yet. Without them `sklp` relays
 into [Lima](https://lima-vm.io) instead (`brew install lima`).
