@@ -4,6 +4,7 @@ package plan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lalternativefabrique/sklp/internal/rolloutgate"
 	parse "github.com/lalternativefabrique/sklp/pipeline/imagebuild"
 	"github.com/lalternativefabrique/sklp/space"
 	rtembed "github.com/lalternativefabrique/sklp/space/embed"
@@ -243,8 +245,14 @@ func NativeBuild(ctx context.Context, cfg NativeBuildConfig, stdout, stderr io.W
 
 // runNativeBuild executes a `kind: publish` step via NativeBuild.
 func runNativeBuild(ctx context.Context, cfg CIExecConfig, step CIStep, _ string, stdoutW, stderrW io.Writer, _ publishExec) (int, error) {
-	if err := NativeBuild(ctx, nativeBuildConfig(cfg.Repo, step.Publish), stdoutW, stderrW); err != nil {
+	build := nativeBuildConfig(cfg.Repo, step.Publish)
+	if err := NativeBuild(ctx, build, stdoutW, stderrW); err != nil {
 		return 1, err
+	}
+	if step.Publish.WaitRollout && build.Push {
+		if err := waitRollout(ctx, cfg.Repo, build.Image+":"+build.Tag, stdoutW, stderrW); err != nil {
+			return 1, err
+		}
 	}
 	return 0, nil
 }
@@ -546,4 +554,17 @@ func expandTilde(p string) string {
 		}
 	}
 	return p
+}
+
+func waitRollout(ctx context.Context, repo, image string, stdout, stderr io.Writer) error {
+	g, err := rolloutgate.Load(repo)
+	if err != nil {
+		return err
+	}
+	err = g.Wait(ctx, image, stdout)
+	if errors.Is(err, rolloutgate.ErrNoNode) {
+		fmt.Fprintf(stderr, "[sklp rollout] warning: not waiting for %s: %v\n", image, err)
+		return nil
+	}
+	return err
 }

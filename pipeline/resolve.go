@@ -13,6 +13,7 @@ package pipeline
 import (
 	"bytes"
 	"fmt"
+	"github.com/lalternativefabrique/sklp/internal/rolloutgate"
 	"os"
 	"os/exec"
 	"sort"
@@ -45,6 +46,7 @@ type contract struct {
 // to map a publish step to a service and its scope globs. Everything else
 // (image, dockerfile, run, …) stays invisible to the resolver.
 type contractStep struct {
+	Image string   `yaml:"image"`
 	Name  string   `yaml:"name"`
 	Kind  string   `yaml:"kind"`
 	Scope scopeRef `yaml:"scope"`
@@ -102,6 +104,8 @@ type resolvedPlan struct {
 	// all this is just ImpactedServices, alphabetical.
 	PublishOrder []string
 
+	repo string
+
 	BaseRef string
 	HeadRef string
 }
@@ -138,13 +142,17 @@ func resolve(yamlBytes []byte, repo, baseRef, headRef string) (*resolvedPlan, er
 			return nil, err
 		}
 	}
-	order := topologicalOrder(impacted, c.Targets)
+	order, err := publishOrder(repo, impacted, c.Targets, c.Steps)
+	if err != nil {
+		return nil, err
+	}
 
 	return &resolvedPlan{
 		Kind:             strings.ToLower(c.Name),
 		ChangedPaths:     paths,
 		ImpactedServices: impacted,
 		PublishOrder:     order,
+		repo:             repo,
 		BaseRef:          baseRef,
 		HeadRef:          headRef,
 	}, nil
@@ -321,6 +329,30 @@ func impactedStepServices(steps []contractStep, scopeDefs map[string][]string, p
 	return out, nil
 }
 
+func publishOrder(repo string, impacted []string, targets map[string]targetEntry, steps []contractStep) ([]string, error) {
+	services := topologicalOrder(impacted, targets)
+	if len(targets) > 0 {
+		return services, nil
+	}
+	g, err := rolloutgate.Load(repo)
+	if err != nil || g == nil {
+		return services, err
+	}
+	images := make(map[string]string, len(steps))
+	for _, st := range steps {
+		images[serviceName(st.Name)] = st.Image
+	}
+	repos := make([]string, len(services))
+	for i, svc := range services {
+		repos[i] = images[svc]
+	}
+	out := make([]string, 0, len(services))
+	for _, i := range g.Order(repos) {
+		out = append(out, services[i])
+	}
+	return out, nil
+}
+
 // serviceName maps a publish step name to its service name by dropping a
 // trailing "-image" suffix (the convention across the publish contracts:
 // core-image, web-image, migrate-image). Names without the suffix pass
@@ -436,7 +468,11 @@ func applyForce(plan *resolvedPlan, yamlBytes []byte) {
 	sort.Strings(impacted)
 
 	plan.ImpactedServices = impacted
-	plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	if order, err := publishOrder(plan.repo, impacted, c.Targets, c.Steps); err == nil {
+		plan.PublishOrder = order
+	} else {
+		plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	}
 }
 
 // scopeDefsFromTask reads just the `scopes:` block out of a contract, so
@@ -488,7 +524,11 @@ func applyOnly(plan *resolvedPlan, yamlBytes []byte, only []string) {
 	sort.Strings(impacted)
 
 	plan.ImpactedServices = impacted
-	plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	if order, err := publishOrder(plan.repo, impacted, c.Targets, c.Steps); err == nil {
+		plan.PublishOrder = order
+	} else {
+		plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	}
 }
 
 // gitFastForward attempts a `git pull --ff-only` against the current
