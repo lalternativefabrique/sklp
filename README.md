@@ -215,7 +215,8 @@ Build and push times for one small app per stack, `linux/amd64` from an Apple M4
 
 Up to three builds ran at once, with base images already pulled, so read these as
 an order of magnitude rather than a benchmark. `rust-axum` builds on `rust:1-alpine`:
-glibc's `rustc` crashes under qemu here.
+glibc's `rustc` crashes under qemu here. Swift (Vapor) did not finish: `swift build`
+hung under qemu, so build Swift images on an amd64 machine.
 
 **Setup, for now.** The VM needs a signed `sklp` built on the Mac, plus a guest
 kernel and rootfs image, which are not published yet. Without them `sklp` relays
