@@ -46,6 +46,7 @@ type contract struct {
 // to map a publish step to a service and its scope globs. Everything else
 // (image, dockerfile, run, …) stays invisible to the resolver.
 type contractStep struct {
+	Image string   `yaml:"image"`
 	Name  string   `yaml:"name"`
 	Kind  string   `yaml:"kind"`
 	Scope scopeRef `yaml:"scope"`
