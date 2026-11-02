@@ -231,6 +231,7 @@ func RunDaemon() error {
 
 	bridgeErr := make(chan error, 1)
 	go func() { bridgeErr <- serveBridge(stop) }()
+	go func() { bridgeErr <- serveForwardBridge(stop) }()
 
 	// Publish the guest's ports on the host loopback, so the URLs the stack
 	// prints actually resolve from the Mac's browser.
