@@ -5,6 +5,8 @@ import (
 	"path"
 	"strconv"
 	"strings"
+
+	"github.com/lalternativefabrique/sklp/internal/rolloutgate"
 )
 
 // CompileCIInput is the data the runner package hands to CompileCI.
@@ -15,6 +17,10 @@ type CompileCIInput struct {
 	// Steps are the merged pipeline steps in declared order. Each entry
 	// is the resolved step (extends already applied by the caller).
 	Steps []CIStepInput
+
+	// Rollout orders publish steps after the deploy manifests' depends_on.
+	// Nil keeps the declared order.
+	Rollout *rolloutgate.Graph
 
 	// PipelineEnv is the pipeline-level env map.
 	PipelineEnv map[string]string
@@ -156,6 +162,9 @@ func CompileCI(in CompileCIInput, match ScopeMatcher, resolveInputs InputResolve
 			anyExplicit = true
 			break
 		}
+	}
+	if !anyExplicit {
+		in.Steps = orderPublishSteps(in.Steps, in.Rollout)
 	}
 	resolvedDeps := make(map[string][]string, len(in.Steps))
 	nodes := make([]DAGNode, 0, len(in.Steps))
@@ -325,6 +334,7 @@ func CompileCI(in CompileCIInput, match ScopeMatcher, resolveInputs InputResolve
 		out.CI.Steps = append(out.CI.Steps, cs)
 	}
 
+	markRolloutWaits(out.CI.Steps, in.Rollout)
 	return out, nil
 }
 

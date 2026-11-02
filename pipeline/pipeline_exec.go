@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lalternativefabrique/sklp/internal/rolloutgate"
 	"io"
 	"os"
 	"sort"
@@ -1188,6 +1189,11 @@ func CompilePipeline(p Pipeline, opts CompilePipelineOptions) (*plan.Plan, error
 			}
 		}
 	}
+	rollout, err := rolloutgate.Load(opts.RepoRoot)
+	if err != nil {
+		return nil, err
+	}
+	in.Rollout = rollout
 	return plan.CompileCI(in, matcher, makeInputResolver(opts.RepoRoot))
 }
 

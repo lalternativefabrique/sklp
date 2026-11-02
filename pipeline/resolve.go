@@ -13,6 +13,7 @@ package pipeline
 import (
 	"bytes"
 	"fmt"
+	"github.com/lalternativefabrique/sklp/internal/rolloutgate"
 	"os"
 	"os/exec"
 	"sort"
@@ -139,6 +140,11 @@ func resolve(yamlBytes []byte, repo, baseRef, headRef string) (*resolvedPlan, er
 		}
 	}
 	order := topologicalOrder(impacted, c.Targets)
+	if len(c.Targets) == 0 {
+		if order, err = orderByRollout(repo, order, c.Steps); err != nil {
+			return nil, err
+		}
+	}
 
 	return &resolvedPlan{
 		Kind:             strings.ToLower(c.Name),
@@ -318,6 +324,26 @@ func impactedStepServices(steps []contractStep, scopeDefs map[string][]string, p
 		out = append(out, s)
 	}
 	sort.Strings(out)
+	return out, nil
+}
+
+func orderByRollout(repo string, services []string, steps []contractStep) ([]string, error) {
+	g, err := rolloutgate.Load(repo)
+	if err != nil || g == nil {
+		return services, err
+	}
+	images := make(map[string]string, len(steps))
+	for _, st := range steps {
+		images[serviceName(st.Name)] = st.Image
+	}
+	repos := make([]string, len(services))
+	for i, svc := range services {
+		repos[i] = images[svc]
+	}
+	out := make([]string, 0, len(services))
+	for _, i := range g.Order(repos) {
+		out = append(out, services[i])
+	}
 	return out, nil
 }
 

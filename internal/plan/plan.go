@@ -356,6 +356,10 @@ type PublishSpec struct {
 	// Push is the executor's gate on the registry push. Defaults to true.
 	Push bool `json:"push"`
 
+	// WaitRollout holds the next steps until a node has applied this image,
+	// because another image in the run depends on it.
+	WaitRollout bool `json:"wait_rollout,omitempty"`
+
 	// ScanEnabled gates the Trivy scan phase. Defaults to true.
 	ScanEnabled bool `json:"scan_enabled"`
 
