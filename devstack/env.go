@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -107,4 +108,45 @@ func mergeLayers(base, envFiles, pipelineEnv, serviceEnv map[string]string) []st
 		out = append(out, k+"="+v)
 	}
 	return out
+}
+
+// rewriteLoopbackPorts points env values at the stack's services: a value
+// naming localhost, 127.0.0.1 or [::1] on a port some other service declares
+// is rewritten to that service's name, which the space resolves. A .env
+// written for services sharing one host keeps working inside a space, where
+// each service's loopback is its own. The service's own port is left alone.
+func rewriteLoopbackPorts(env []string, self string, portOwner map[int]string) []string {
+	if len(portOwner) == 0 {
+		return env
+	}
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			out = append(out, kv)
+			continue
+		}
+		for port, owner := range portOwner {
+			if owner == self {
+				continue
+			}
+			target := owner + ":" + strconv.Itoa(port)
+			for _, host := range []string{"localhost", "127.0.0.1", "[::1]"} {
+				v = strings.ReplaceAll(v, host+":"+strconv.Itoa(port), target)
+			}
+		}
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+// declaredPortOwners maps each declared `port:` to the service that binds it.
+func declaredPortOwners(services []NamedService) map[int]string {
+	owners := map[int]string{}
+	for _, ns := range services {
+		if ns.Def.Port > 0 {
+			owners[ns.Def.Port] = ns.Name
+		}
+	}
+	return owners
 }

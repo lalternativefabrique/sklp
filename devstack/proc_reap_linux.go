@@ -68,3 +68,28 @@ func reapOrphans(budget time.Duration) {
 		}
 	}
 }
+
+// reapExitStatus collects the exit status of a container init this process
+// has been handed as subreaper: runc runs a service detached and exits, so
+// its init is re-parented here, and its zombie waits for this wait4. Bounded,
+// since a status that never comes must not stall the stack.
+func reapExitStatus(pid int) (code int, known bool) {
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		var ws unix.WaitStatus
+		wpid, err := unix.Wait4(pid, &ws, unix.WNOHANG, nil)
+		switch {
+		case wpid == pid && err == nil:
+			if ws.Signaled() {
+				return 128 + int(ws.Signal()), true
+			}
+			return ws.ExitStatus(), true
+		case err == unix.ECHILD:
+			return 0, false
+		}
+		if time.Now().After(deadline) {
+			return 0, false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
