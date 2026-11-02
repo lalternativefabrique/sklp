@@ -17,6 +17,10 @@ runs rootless.
 curl -fsSL https://raw.githubusercontent.com/lalternativefabrique/sklp/main/install/sklp.sh | sh
 ```
 
+> **Works on your Mac.** On Apple silicon, `sklp` boots its own Linux VM on
+> Virtualization.framework and runs the same spaces there: `sklp dev`,
+> `sklp run` and `sklet`, with no Docker Desktop. See [macOS](#macos).
+
 ## Why
 
 The modern dev loop is three different worlds: Docker Compose on the laptop,
@@ -144,7 +148,7 @@ the process without touching disk in clear.
 
 ## Install
 
-**Workstation** (Linux, or macOS for the CLI verbs):
+**Workstation** (Linux, or [macOS](#macos)):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/lalternativefabrique/sklp/main/install/sklp.sh | sh
@@ -165,6 +169,42 @@ sklp deploy login --context prod --server https://<node>:6464 --token <T> --ca-f
 sklp deploy apply api -context prod
 sklp deploy logs api -f
 ```
+
+## macOS
+
+`sklp` on a Mac is the same runtime as on Linux, in a VM it manages itself. The
+binary you run stays on the Mac; every verb that needs Linux is relayed into the
+guest, with your home mounted at the same path.
+
+```sh
+sklp dev web                              # your stack, ports on 127.0.0.1
+sklp run publish                          # build and push from an arm64 Mac, linux/amd64 included
+sklp macos exec sklet apply api           # the VM is the node: a local deployment
+sklp macos status                         # up, down, build
+```
+
+- **Dev stacks.** The ports a `dev.yaml` declares are published on the Mac for
+  as long as `sklp dev` runs, and `<svc>.<scope>.localhost` works too.
+- **Your `node_modules` stay yours.** A `run:` service installs into a volume of
+  the space, so a Linux `pnpm` never rewrites the Mac's native packages.
+- **Images for other architectures.** A `platform: linux/amd64` step runs through
+  qemu-user in the guest. It works, and it is slow: a Go build takes minutes.
+- **Memory.** The VM gets 4 GB; `SKLP_VZ_MEMORY_GB=12 sklp macos up` gives it more.
+
+**Setup, for now.** The VM needs a signed `sklp` built on the Mac, plus a guest
+kernel and rootfs image, which are not published yet. Without them `sklp` relays
+into [Lima](https://lima-vm.io) instead (`brew install lima`).
+
+```sh
+go generate ./space/embed/
+CGO_ENABLED=1 go build -o ~/.local/bin/sklp ./cmd/sklp
+codesign --force --sign - --entitlements scripts/vz.entitlements ~/.local/bin/sklp
+```
+
+Build the guest once on an arm64 Linux machine with `sudo sklp macos build`, from
+a checkout, and copy `kernel` and `rootfs.img` into `~/.cache/sklp/vz`. After
+that, `sklp macos build -rootfs-only` refreshes the image from the Mac. It stops
+the VM and every space in it.
 
 ## Build from source
 
@@ -187,7 +227,8 @@ uploads to the dist bucket and publishes the GitHub release of that tag.
 - `uidmap` (`newuidmap` / `newgidmap`) for rootless spaces
 - `systemd --user` with `cpu memory pids` delegated for resource limits
 
-`sklet host setup` configures all of this on a fresh VM.
+`sklet host setup` configures all of this on a fresh VM. On macOS the VM carries
+all of it; see [macOS](#macos).
 
 ## Status
 
