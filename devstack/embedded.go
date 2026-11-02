@@ -3,6 +3,7 @@ package devstack
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/lalternativefabrique/sklp/pipeline"
@@ -197,6 +198,7 @@ func devServiceSpec(ns NamedService, hostRepo string, tc devToolchain, env []str
 	spec.Workdir = ns.Def.Workdir
 	spec.ConfigEnv = tc.Env
 	spec.Secrets = tc.Secrets
+	spec.Volumes = nodeModulesVolumes(hostRepo, defaultRepoMount)
 
 	// If the project declares system packages, this run: service must run on a
 	// BUILT runner rootfs (baked packages + toolchain) rather than the minimal
@@ -212,6 +214,18 @@ func devServiceSpec(ns NamedService, hostRepo string, tc devToolchain, env []str
 	spec.ToolchainBinDirs = tc.BinDirs
 	spec.SktCacheMount = tc.CacheRoot
 	return spec
+}
+
+// nodeModulesVolumes keeps a JS project's installed packages out of the host
+// repo: the bind shares the operator's node_modules with the space, and a
+// pnpm run there replaces the Mac's native packages with Linux ones — which
+// pnpm then tears out again at the next install on the host. Each is given
+// its own, in a volume of the space, on the space's own disk.
+func nodeModulesVolumes(hostRepo, repoMount string) []string {
+	if _, err := os.Stat(filepath.Join(hostRepo, "package.json")); err != nil {
+		return nil
+	}
+	return []string{"sklp-dev-node-modules:" + repoMount + "/node_modules"}
 }
 
 // devBaseImage is the minimal glibc rootfs a run: service runs on. Overridable
