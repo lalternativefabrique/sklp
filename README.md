@@ -177,7 +177,9 @@ go build -o ~/.local/bin/sklet ./cmd/sklet
 ```
 
 `scripts/build-cli-binaries.sh` produces the static release binaries for
-linux/amd64, linux/arm64 and darwin.
+linux/amd64, linux/arm64 and darwin, plus `skt` at the version `scripts/skt.pin`
+names. A release is a tag on `main` followed by `sklp run release`, which builds,
+uploads to the dist bucket and publishes the GitHub release of that tag.
 
 ## Requirements
 
