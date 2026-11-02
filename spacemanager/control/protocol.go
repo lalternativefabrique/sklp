@@ -278,7 +278,7 @@ func ListSpaces() ([]string, error) {
 	var spaces []string
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".sock") {
+		if e.IsDir() || !strings.HasSuffix(name, ".sock") || isWorkerSocket(name) {
 			continue
 		}
 		if !socketResponds(filepath.Join(dir, name)) {
@@ -288,6 +288,12 @@ func ListSpaces() ([]string, error) {
 	}
 	sort.Strings(spaces)
 	return spaces, nil
+}
+
+// isWorkerSocket spots the network worker's attach and ingress sockets, which
+// share this directory but do not speak the control API.
+func isWorkerSocket(name string) bool {
+	return strings.HasPrefix(name, "space-attach-") || strings.HasPrefix(name, "space-ingress-")
 }
 
 // socketResponds reports whether a unix socket has a live listener. Kept here

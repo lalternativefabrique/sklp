@@ -57,6 +57,7 @@ type Options struct {
 	RootfsOnly bool
 	Jobs       int
 	SklpBin    string // linux sklp to bake in; built from source when empty
+	SkletBin   string // linux sklet to bake in; built from source when empty
 	SktBin     string // linux skt to bake in; built from source when empty
 	AgentBin   string // linux sklp-vzagent to bake in as /init; built when empty
 }
@@ -71,6 +72,7 @@ func ParseFlags(argv []string) (Options, error) {
 	fs.BoolVar(&o.RootfsOnly, "rootfs-only", false, "build only the rootfs image")
 	fs.IntVar(&o.Jobs, "jobs", 0, "parallel compile jobs (0 = NumCPU)")
 	fs.StringVar(&o.SklpBin, "sklp-bin", "", "linux sklp binary to bake into the rootfs")
+	fs.StringVar(&o.SkletBin, "sklet-bin", "", "linux sklet binary to bake into the rootfs")
 	fs.StringVar(&o.SktBin, "skt-bin", "", "linux skt binary to bake into the rootfs")
 	fs.StringVar(&o.AgentBin, "agent-bin", "", "linux sklp-vzagent binary to bake in as the guest init")
 	if err := fs.Parse(argv); err != nil {

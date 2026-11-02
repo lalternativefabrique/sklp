@@ -12,7 +12,7 @@
 //   - vz — sklp's own VM on Virtualization.framework (darwin/arm64, cgo
 //     builds). Where it exists it is THE backend, needing nothing installed
 //     on the host, with the same debian:trixie-slim guest the runner rootfs
-//     is built from. Missing artifacts are an error naming `sklp vz build`,
+//     is built from. Missing artifacts are an error naming `sklp macos build`,
 //     never a silent fall-through to another VM.
 //   - lima — the validated path end to end: a full `sklp dev` stack with
 //     images, runner rootfs builds, service DNS and host ingress.
@@ -262,7 +262,7 @@ func pickProvider() (provider, error) {
 		// Falling through is announced rather than silent: which Linux a run
 		// happened on is the kind of thing that must not be guessed at when a
 		// result later looks wrong.
-		fmt.Fprintf(os.Stderr, "[sklp] vz: %v — falling back (run `sklp vz build` to use the native VM)\n", err)
+		fmt.Fprintf(os.Stderr, "[sklp] vz: %v — falling back (run `sklp macos build` to use the native VM)\n", err)
 	}
 	if p, err := exec.LookPath("limactl"); err == nil {
 		return limaProvider{limactl: p}, nil
@@ -331,6 +331,9 @@ touch ` + marker
 // falls back to the published dist build — and is (re)installed only when its
 // hash differs from the guest's.
 func ensureGuestTools(p provider) error {
+	if _, baked := p.(imageProvider); baked {
+		return nil
+	}
 	bin, err := findLinuxTool("sklp", "SKLP_LIMA_BIN")
 	if err != nil {
 		bin, err = downloadLinuxSklp()
@@ -351,11 +354,6 @@ func ensureGuestTools(p provider) error {
 }
 
 func syncGuestTool(p provider, name, bin string) error {
-	// An image-based provider ships the tools inside its rootfs; there is
-	// nothing to push and nothing to report.
-	if _, baked := p.(imageProvider); baked {
-		return nil
-	}
 	hostSum, err := fileSHA256(bin)
 	if err != nil {
 		return err

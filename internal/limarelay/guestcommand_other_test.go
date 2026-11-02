@@ -20,6 +20,9 @@ func TestGuestCommandForwardsSetVars(t *testing.T) {
 // With nothing to carry the command must stay a bare `sklp …`: an empty `env`
 // prefix would still work but hides the real command in ps output.
 func TestGuestCommandWithoutVars(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home)
 	for _, k := range forwardedEnv {
 		t.Setenv(k, "") // registers the restore, then clear it outright
 		if err := os.Unsetenv(k); err != nil {

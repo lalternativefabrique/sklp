@@ -32,13 +32,20 @@ func vzBuildViaVM(ctx context.Context, o vzbuild.Options) int {
 		return 1
 	}
 
+	if err := fetchEmbeddedHelpers(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "sklp macos build: %v\n", err)
+		return 1
+	}
+
 	sklpBin := filepath.Join(staging, "sklp-linux")
+	skletBin := filepath.Join(staging, "sklet")
 	agentBin := filepath.Join(staging, "sklp-vzagent")
 	for _, b := range []struct {
 		out, pkg string
 		tags     string
 	}{
 		{sklpBin, "./cmd/sklp", "embedded_runtime"},
+		{skletBin, "./cmd/sklet", ""},
 		{agentBin, "./cmd/sklp-vzagent", ""},
 	} {
 		args := []string{"build", "-trimpath", "-ldflags=-s -w"}
@@ -78,6 +85,7 @@ func vzBuildViaVM(ctx context.Context, o vzbuild.Options) int {
 		"-rootfs-only",
 		"-arch", o.Arch,
 		"-sklp-bin", sklpBin,
+		"-sklet-bin", skletBin,
 		"-agent-bin", agentBin,
 		"-out", outNext,
 		"-work", "/var/tmp/sklp-vzbuild",
@@ -115,6 +123,21 @@ func vzBuildViaVM(ctx context.Context, o vzbuild.Options) int {
 	}
 	fmt.Printf("rootfs rebuilt: %s — the next `sklp dev` (or `sklp macos up`) boots it\n", dst)
 	return 0
+}
+
+// fetchEmbeddedHelpers populates space/embed/bin before the cross-build. The
+// helpers are gitignored, so without this a clean checkout produces a guest
+// sklp with no runc and no slirp4netns, and the rebuilt VM cannot start a space.
+func fetchEmbeddedHelpers(ctx context.Context) error {
+	if _, err := os.Stat("space/embed/gen"); err != nil {
+		return fmt.Errorf("run this from a checkout of github.com/lalternativefabrique/sklp: the guest binaries are built from source")
+	}
+	cmd := exec.CommandContext(ctx, "go", "run", "./space/embed/gen")
+	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("fetch runc and slirp4netns: %w", err)
+	}
+	return nil
 }
 
 // vzBuildIsRelayed reports whether this invocation should build through the VM

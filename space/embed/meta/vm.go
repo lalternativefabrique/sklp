@@ -36,6 +36,12 @@ const (
 //     creates the table and chain, then rejects the rule with
 //     "Could not process rule: No such file or directory"
 //   - NFT_REDIR      spacemanager's gateway redirect (:80→:9080)
+//   - NF_TABLES_BRIDGE, NF_CONNTRACK_BRIDGE
+//     the east-west ACL: a bridge-family forward chain matching
+//     `ct state`. Without them the table is rejected and the
+//     space loses its east-west audit
+//   - NFT_LOG, NF_LOG_SYSLOG
+//     the `log` statement that audit is written with
 var KernelExtras = []string{
 	"TUN",
 	"NF_TABLES",
@@ -48,6 +54,10 @@ var KernelExtras = []string{
 	"NF_NAT_MASQUERADE",
 	"NF_CONNTRACK",
 	"NFT_COMPAT",
+	"NF_TABLES_BRIDGE",
+	"NF_CONNTRACK_BRIDGE",
+	"NFT_LOG",
+	"NF_LOG_SYSLOG",
 }
 
 // VMArtifact describes one file the vz backend needs in its cache.
@@ -56,7 +66,7 @@ type VMArtifact struct {
 	SHA256 string // empty until a published build is pinned
 }
 
-// VMArtifacts are the files `sklp vz build` produces. Their sha256 stay empty
+// VMArtifacts are the files `sklp macos build` produces. Their sha256 stay empty
 // while the artifacts are built locally; pin them once a published build is
 // served from the dist bucket.
 var VMArtifacts = []VMArtifact{
