@@ -23,9 +23,10 @@ const rootfsSizeBytes = 64 << 30
 
 // guestExtraPackages are what the VM needs beyond a deploy host: qemu-user
 // handlers so a publish step can build a foreign platform (an amd64 image on
-// an Apple Silicon Mac). update-binfmts records them at install time; the
-// agent registers them at boot, since binfmt_misc is not mounted in the chroot.
-var guestExtraPackages = []string{"qemu-user-static", "binfmt-support"}
+// an Apple Silicon Mac), registered by the agent at boot from the binfmt.d
+// fragments the package ships; ssh so a pipeline's `git pull` reaches a
+// remote the Mac clones over ssh.
+var guestExtraPackages = []string{"qemu-user-static", "openssh-client"}
 
 // buildRootfs assembles the guest rootfs from the pinned OCI base, installs
 // the tools sklp shells out to, bakes in sklp/skt/the vz agent, and writes an
@@ -66,6 +67,9 @@ func buildRootfs(ctx context.Context, o Options) error {
 	if err := writeSubids(stage); err != nil {
 		return err
 	}
+	if err := writeHosts(stage); err != nil {
+		return err
+	}
 
 	img := filepath.Join(o.Out, "rootfs.img")
 	fmt.Fprintf(os.Stderr, "[vz] writing %s\n", img)
@@ -76,11 +80,17 @@ func buildRootfs(ctx context.Context, o Options) error {
 	return run(ctx, o.Work, "mkfs.ext4", "-q", "-d", stage, "-F", img)
 }
 
-// bakeBinaries installs sklp, skt and the guest agent. The agent is the
+// bakeBinaries installs sklp, sklet, skt and the guest agent. sklet has to sit
+// on the guest's own disk: a supervisor re-enters its binary from a subuid, and
+// the path to one on the virtiofs share cannot be opened to that uid. The agent is the
 // image's /init: it mounts what the runtime needs and serves the vsock
 // protocol the host drives it with.
 func bakeBinaries(ctx context.Context, o Options, stage string) error {
 	sklpBin, err := resolveBinary(ctx, o.SklpBin, "sklp", "./cmd/sklp", o.Arch, o.Work, true)
+	if err != nil {
+		return err
+	}
+	skletBin, err := resolveBinary(ctx, o.SkletBin, "sklet", "./cmd/sklet", o.Arch, o.Work, false)
 	if err != nil {
 		return err
 	}
@@ -89,6 +99,9 @@ func bakeBinaries(ctx context.Context, o Options, stage string) error {
 		return err
 	}
 	if err := install(sklpBin, filepath.Join(stage, "usr/local/bin/sklp")); err != nil {
+		return err
+	}
+	if err := install(skletBin, filepath.Join(stage, "usr/local/bin/sklet")); err != nil {
 		return err
 	}
 	if err := install(agent, filepath.Join(stage, "init")); err != nil {
@@ -155,6 +168,12 @@ func lookGo() (string, error) {
 // may run as. Without a range covering the caller, spacenet degrades to a
 // space with no name-based DNS instead of failing outright.
 func writeSubids(stage string) error { return host.WriteSubids(stage) }
+
+// writeHosts gives the guest the /etc/hosts an OCI base leaves out; without it
+// `localhost` goes to the public resolvers and fails.
+func writeHosts(stage string) error {
+	return os.WriteFile(filepath.Join(stage, "etc/hosts"), []byte("127.0.0.1 localhost\n::1 localhost\n"), 0o644)
+}
 
 // pullOCILayer downloads the single rootfs layer of an OCI image straight from
 // the registry: no daemon, no client, just the distribution API.

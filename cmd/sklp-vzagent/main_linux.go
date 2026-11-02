@@ -15,6 +15,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -128,14 +129,27 @@ func registerBinfmt() {
 		logf("mount %s: %v", dir, err)
 		return
 	}
-	if _, err := os.Stat("/usr/sbin/update-binfmts"); err != nil {
-		return
+	// qemu-user-static ships its formats as systemd binfmt.d fragments, which
+	// nothing applies in a guest whose init is this agent.
+	confs, _ := filepath.Glob("/usr/lib/binfmt.d/qemu-*.conf")
+	registered := 0
+	for _, conf := range confs {
+		b, err := os.ReadFile(conf)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if err := os.WriteFile(filepath.Join(dir, "register"), []byte(line), 0o200); err != nil {
+				logf("binfmt %s: %v", filepath.Base(conf), err)
+				continue
+			}
+			registered++
+		}
 	}
-	if out, err := exec.Command("/usr/sbin/update-binfmts", "--enable").CombinedOutput(); err != nil {
-		logf("update-binfmts --enable: %v: %s", err, strings.TrimSpace(string(out)))
-		return
-	}
-	logf("binfmt handlers registered")
+	logf("binfmt: %d qemu handlers registered", registered)
 }
 
 func mountAll(home string) {

@@ -5,7 +5,7 @@ package limarelay
 import "testing"
 
 // An unbuilt native backend falls through to a VM manager rather than failing,
-// so a machine that has not run `sklp vz build` yet still works — but never
+// so a machine that has not run `sklp macos build` yet still works — but never
 // silently: which Linux a run happened on is announced on stderr.
 func TestPickProviderFallsThroughWhenNativeUnbuilt(t *testing.T) {
 	t.Setenv("SKLP_VM_PROVIDER", "")

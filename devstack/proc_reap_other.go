@@ -13,3 +13,5 @@ import "time"
 func installSubreaper() {}
 
 func reapOrphans(time.Duration) {}
+
+func reapExitStatus(_ int) (code int, known bool) { return 0, false }

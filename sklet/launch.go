@@ -80,7 +80,7 @@ func DeployDetached(cfg *spacemanager.DeployConfig, services []spacemanager.Serv
 		return fmt.Errorf("apply manifest to space %q: %w", meta.Name, err)
 	}
 	PrintApplyResult(meta.Name, res)
-	fmt.Printf("space %q deployed — supervised by systemd --user (sklet logs <svc>, sklet delete)\n", meta.Name)
+	fmt.Printf("space %q deployed — supervised by systemd --user (sklp deploy logs <svc>, sklp deploy delete)\n", meta.Name)
 	return nil
 }
 
@@ -177,7 +177,7 @@ func DeployDetachedNoSystemd(cfg *spacemanager.DeployConfig, services []spaceman
 		return fmt.Errorf("apply manifest to space %q: %w", meta.Name, err)
 	}
 	PrintApplyResult(meta.Name, res)
-	fmt.Printf("space %q deployed — supervised in background (no systemd); logs: sklet logs <svc>, delete: sklet delete\n", meta.Name)
+	fmt.Printf("space %q deployed — supervised in background (no systemd); logs: sklp deploy logs <svc>, delete: sklp deploy delete\n", meta.Name)
 	return nil
 }
 

@@ -66,6 +66,10 @@ func embeddedRun(
 		return 1
 	}
 
+	// The exit status of a oneshot comes from its init, which runc leaves to
+	// the nearest subreaper once it has detached.
+	installSubreaper()
+	portOwners := declaredPortOwners(stack.Services)
 	for _, ns := range stack.Services {
 		if ns.Def.Optional {
 			printer.Banner("[%s] optional — skipped", ns.Name)
@@ -75,11 +79,11 @@ func embeddedRun(
 		// Container env: declared sources only (env files / pipeline / service),
 		// NEVER the host shell's env. Leaking the host PATH would override the
 		// image PATH (OCI last-wins) — e.g. postgres would no longer find initdb.
-		env := composeContainerEnv(envFromFiles, baseEnv, ns.Def.Env)
+		env := rewriteLoopbackPorts(composeContainerEnv(envFromFiles, baseEnv, ns.Def.Env), ns.Name, portOwners)
 		spec := devServiceSpec(ns, repoAbs, toolchain, env)
 
 		printer.Banner("[%s] launching (embedded runc)", ns.Name)
-		_, err := backend.StartService(ctx, spec)
+		pid, err := backend.StartService(ctx, spec)
 		if err != nil {
 			printer.Banner("[%s] launch failed: %v", ns.Name, err)
 			shutdown(fmt.Sprintf("[%s] launch failed", ns.Name))
@@ -102,7 +106,17 @@ func embeddedRun(
 				shutdown(fmt.Sprintf("received %s during [%s] oneshot", sig, ns.Name))
 				return 0
 			case <-backend.Watch(ctx, ns.Name):
-				printer.Banner("[%s] completed", ns.Name)
+				code, known := reapExitStatus(pid)
+				switch {
+				case known && code != 0:
+					printer.Banner("[%s] failed (exit %d)", ns.Name, code)
+					shutdown(fmt.Sprintf("[%s] failed", ns.Name))
+					return 1
+				case known:
+					printer.Banner("[%s] completed", ns.Name)
+				default:
+					printer.Banner("[%s] completed (exit status not observed)", ns.Name)
+				}
 			}
 			continue
 		}

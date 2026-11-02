@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/lalternativefabrique/sklp/internal/cli"
+	"github.com/lalternativefabrique/sklp/internal/limarelay"
 	"github.com/lalternativefabrique/sklp/internal/vzbuild"
 )
 
@@ -33,7 +35,7 @@ needs two artifacts in its cache:
               netfilter/tun options spacenet needs (a stock distro kernel
               ships those as modules and will not boot here)
   rootfs.img  an ext4 image built from ` + vzbuild.GuestBase + `, carrying sklp,
-              skt and the tools sklp shells out to
+              sklet, skt and the tools sklp shells out to
 
 This backend is the default on Apple silicon; SKLP_VM_PROVIDER=lima|orbstack
 picks another. The artifacts live under ~/.cache/sklp/vz (SKLP_VZ_DIR).`,
@@ -94,6 +96,17 @@ builder: this runs them wherever sklp is already relaying to.`,
 				},
 			},
 			{
+				Name:  "exec",
+				Short: "Run a command inside the VM, from the current directory",
+				Long: `Runs a command in the Linux guest with the Mac's current directory as its
+working directory. This is how a node-side verb runs on this Mac: the VM is the
+node, so a local deployment is ` + "`sklp macos exec sklet apply <stack>`" + `.`,
+				RawArgs: true,
+				Run: func(_ context.Context, args cli.Args) int {
+					return macosExec(args.Passthrough())
+				},
+			},
+			{
 				Name:  "status",
 				Short: "Show which artifacts are present and their versions",
 				Run: func(ctx context.Context, args cli.Args) int {
@@ -102,6 +115,31 @@ builder: this runs them wherever sklp is already relaying to.`,
 			},
 		},
 	}
+}
+
+func macosExec(argv []string) int {
+	if len(argv) > 0 && argv[0] == "--" {
+		argv = argv[1:]
+	}
+	if len(argv) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: sklp macos exec <command> [args...]")
+		return 2
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sklp macos exec: %v\n", err)
+		return 1
+	}
+	err = limarelay.RelayCommand(cwd, argv)
+	var exit *limarelay.GuestExitError
+	if errors.As(err, &exit) {
+		return exit.Code
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sklp macos exec: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func vzBuild(ctx context.Context, argv []string) int {

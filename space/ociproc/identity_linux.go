@@ -29,13 +29,16 @@ type Identity struct {
 // ResolveIdentity reads the caller's delegated subuid/subgid range. A non-root
 // caller uses its /etc/subuid and /etc/subgid grants. Root inside a user
 // namespace has no grant to read but may already own a range: whatever ids
-// above 0 its own namespace maps are handed down. Root with nothing mapped
-// above 0 gets the single 0→0 identity.
+// above 0 its own namespace maps are handed down. Real root takes the range
+// /etc/subuid grants it, and with none gets the single 0→0 identity.
 func ResolveIdentity(hostUID, hostGID int) (Identity, error) {
 	if hostUID == 0 {
 		uidCount, gidCount := mappedRangeAboveRoot(uidMapPath), mappedRangeAboveRoot(gidMapPath)
 		if uidCount > 0 && gidCount > 0 {
 			return Identity{UIDBase: 1, GIDBase: 1, UIDCount: uidCount, GIDCount: gidCount}, nil
+		}
+		if id, ok := rootDelegatedIdentity(hostGID); ok {
+			return id, nil
 		}
 		return Identity{}, nil
 	}
@@ -60,6 +63,23 @@ func ResolveIdentity(hostUID, hostGID int) (Identity, error) {
 		id.RootPoolUID, id.RootPoolGID, id.RootPoolCount = poolUID, poolGID, min(poolUIDCount, poolGIDCount)
 	}
 	return id, nil
+}
+
+// rootDelegatedIdentity is real root's identity when the host grants it a
+// subuid range: the container then maps ids 1..N onto that range, like any
+// other operator. Without one, root stays on the single-id mapping — a build
+// step still gets its user namespace, so every id but 0 is then unmapped and
+// apt's drop to _apt fails with EINVAL.
+func rootDelegatedIdentity(hostGID int) (Identity, bool) {
+	uidBase, uidCount, err := readSubIDRange(subuidPath, "root", 0)
+	if err != nil {
+		return Identity{}, false
+	}
+	gidBase, gidCount, err := readSubIDRange(subgidPath, "root", 0)
+	if err != nil {
+		return Identity{}, false
+	}
+	return Identity{HostGID: hostGID, UIDBase: uidBase, GIDBase: gidBase, UIDCount: uidCount, GIDCount: gidCount}, true
 }
 
 // SpaceRoot is where the root of the child user namespace in slot lives:

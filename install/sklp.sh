@@ -10,8 +10,8 @@
 # instance's dist origin at request time.
 #
 # The binary is fully static (CGO_ENABLED=0), so it runs on any Linux without a
-# matching glibc. sklp's runtime (rootless spaces) is Linux-only; on other OSes
-# this installs the CLI but `sklp deploy` will report it is Linux-only.
+# matching glibc. sklp's runtime (rootless spaces) is Linux-only; on
+# macOS the CLI relays them into a Linux VM.
 
 set -eu
 
@@ -32,8 +32,8 @@ esac
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "$os" in
   linux)  ;;
-  darwin) say "note: sklp CLI installs on macOS, but rootless spaces are Linux-only" ;;
-  *) err "unsupported OS: $os (sklp targets linux; darwin is CLI-only)" ;;
+  darwin) say "note: on macOS, sklp runs spaces in a Linux VM; see the macOS section of the README" ;;
+  *) err "unsupported OS: $os (sklp targets linux and macOS)" ;;
 esac
 
 arch="$(uname -m)"
