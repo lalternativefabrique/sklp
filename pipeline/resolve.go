@@ -104,6 +104,8 @@ type resolvedPlan struct {
 	// all this is just ImpactedServices, alphabetical.
 	PublishOrder []string
 
+	repo string
+
 	BaseRef string
 	HeadRef string
 }
@@ -140,11 +142,9 @@ func resolve(yamlBytes []byte, repo, baseRef, headRef string) (*resolvedPlan, er
 			return nil, err
 		}
 	}
-	order := topologicalOrder(impacted, c.Targets)
-	if len(c.Targets) == 0 {
-		if order, err = orderByRollout(repo, order, c.Steps); err != nil {
-			return nil, err
-		}
+	order, err := publishOrder(repo, impacted, c.Targets, c.Steps)
+	if err != nil {
+		return nil, err
 	}
 
 	return &resolvedPlan{
@@ -152,6 +152,7 @@ func resolve(yamlBytes []byte, repo, baseRef, headRef string) (*resolvedPlan, er
 		ChangedPaths:     paths,
 		ImpactedServices: impacted,
 		PublishOrder:     order,
+		repo:             repo,
 		BaseRef:          baseRef,
 		HeadRef:          headRef,
 	}, nil
@@ -328,7 +329,11 @@ func impactedStepServices(steps []contractStep, scopeDefs map[string][]string, p
 	return out, nil
 }
 
-func orderByRollout(repo string, services []string, steps []contractStep) ([]string, error) {
+func publishOrder(repo string, impacted []string, targets map[string]targetEntry, steps []contractStep) ([]string, error) {
+	services := topologicalOrder(impacted, targets)
+	if len(targets) > 0 {
+		return services, nil
+	}
 	g, err := rolloutgate.Load(repo)
 	if err != nil || g == nil {
 		return services, err
@@ -463,7 +468,11 @@ func applyForce(plan *resolvedPlan, yamlBytes []byte) {
 	sort.Strings(impacted)
 
 	plan.ImpactedServices = impacted
-	plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	if order, err := publishOrder(plan.repo, impacted, c.Targets, c.Steps); err == nil {
+		plan.PublishOrder = order
+	} else {
+		plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	}
 }
 
 // scopeDefsFromTask reads just the `scopes:` block out of a contract, so
@@ -515,7 +524,11 @@ func applyOnly(plan *resolvedPlan, yamlBytes []byte, only []string) {
 	sort.Strings(impacted)
 
 	plan.ImpactedServices = impacted
-	plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	if order, err := publishOrder(plan.repo, impacted, c.Targets, c.Steps); err == nil {
+		plan.PublishOrder = order
+	} else {
+		plan.PublishOrder = topologicalOrder(impacted, c.Targets)
+	}
 }
 
 // gitFastForward attempts a `git pull --ff-only` against the current
