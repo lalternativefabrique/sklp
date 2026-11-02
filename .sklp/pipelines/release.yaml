@@ -1,0 +1,67 @@
+version: 1
+kind: pipeline
+name: release
+
+# Started by name on a tagged main: `git tag -a vX.Y.Z && sklp run release`.
+# Builds sklp, sklet and sklp-relay-bridge for linux and darwin, skt at the
+# version scripts/skt.pin names, uploads the set to the dist bucket under
+# the tag and latest/ (what the installers read), and publishes the same
+# files as the GitHub release of the tag.
+#
+# The sandbox tests need the host; this build does not, but the darwin
+# cross-build and the embedded helpers are easiest where go generate ran.
+tools:
+  go: "1.26.10"
+  rust: "1.90.0"
+
+on:
+  branches: [main]
+  clean_tree: true
+
+secrets:
+  - SKLP_SCW_ACCESS_KEY
+  - SKLP_SCW_SECRET_KEY
+  - GITHUB_TOKEN
+
+steps:
+  - name: release
+    tools: [go, rust]
+    secrets:
+      - SKLP_SCW_ACCESS_KEY
+      - SKLP_SCW_SECRET_KEY
+      - GITHUB_TOKEN
+    env:
+      SKLP_DIST_S3_UPLOAD: "1"
+      AWS_DEFAULT_REGION: fr-par
+    run: |
+      set -euo pipefail
+      tag="$(git describe --exact-match --tags HEAD 2>/dev/null || true)"
+      case "$tag" in
+        v[0-9]*) ;;
+        *) echo "release: HEAD carries no v* tag; tag it first" >&2; exit 1 ;;
+      esac
+      export AWS_ACCESS_KEY_ID="$SKLP_SCW_ACCESS_KEY"
+      export AWS_SECRET_ACCESS_KEY="$SKLP_SCW_SECRET_KEY"
+      if ! command -v aws >/dev/null; then
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+        unzip -q /tmp/awscliv2.zip -d /tmp
+        /tmp/aws/install --bin-dir /tmp/awsbin --install-dir /tmp/aws-cli
+        export PATH="/tmp/awsbin:$PATH"
+      fi
+      SKLP_RELEASE="$tag" scripts/build-cli-binaries.sh "$tag"
+      previous="$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)"
+      {
+        echo "## Changes"; echo
+        git log --format='- %s' ${previous:+$previous..}$tag
+        echo; echo "## Install"; echo
+        echo '```sh'
+        echo 'curl -fsSL https://raw.githubusercontent.com/lalternativefabrique/sklp/main/install/sklp.sh | sh'
+        echo '```'
+        echo; echo "skt $(tr -d '[:space:]' < scripts/skt.pin) is bundled."
+      } > "dist/cli/$tag/NOTES.md"
+      if ! command -v gh >/dev/null; then
+        curl -fsSL https://github.com/cli/cli/releases/download/v2.86.0/gh_2.86.0_linux_amd64.tar.gz | tar -xz -C /tmp
+        export PATH="/tmp/gh_2.86.0_linux_amd64/bin:$PATH"
+      fi
+      gh release create "$tag" --verify-tag --title "sklp $tag" --notes-file "dist/cli/$tag/NOTES.md" \
+        "dist/cli/$tag/"sklp-* "dist/cli/$tag/"sklet-* "dist/cli/$tag/"skt-* "dist/cli/$tag/SHA256SUMS"

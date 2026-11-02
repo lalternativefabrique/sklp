@@ -108,6 +108,14 @@ build sklp ./cmd/sklp darwin arm64
 build sklp ./cmd/sklp darwin amd64
 
 # `sklet upgrade` refuses a binary that does not match this list.
+# skt, the toolchain manager, comes from its own repository at the version
+# scripts/skt.pin names. linux/amd64 only: nothing consumes an arm64 skt yet.
+skt_src="$(scripts/skt-src.sh)"
+echo "building ${OUT_BASE}/${VERSION}/skt-linux-amd64 from ${skt_src} ..."
+( cd "$skt_src" && cargo build --release --locked --target x86_64-unknown-linux-gnu )
+cp "$skt_src/target/x86_64-unknown-linux-gnu/release/skt" "${OUT_BASE}/${VERSION}/skt-linux-amd64"
+chmod 0755 "${OUT_BASE}/${VERSION}/skt-linux-amd64"
+
 (cd "${OUT_BASE}/${VERSION}" && rm -f SHA256SUMS && sha256sum -- * > SHA256SUMS)
 
 # Mirror this version under latest/ so the default installer URL resolves.
