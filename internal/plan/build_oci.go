@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	parse "github.com/lalternativefabrique/sklp/pipeline/imagebuild"
@@ -28,6 +29,38 @@ func init() { nativeBuildFn = runNativeBuild }
 const buildPidsLimit = 4096
 
 const orphanBuildWorkMinAge = time.Hour
+
+// imageBuildSlot admits one image build at a time, so per-step limits are also
+// the run's total: parallel publish steps would otherwise add them up.
+var imageBuildSlot = make(chan struct{}, 1)
+
+func acquireImageBuildSlot(ctx context.Context) (release func(), err error) {
+	select {
+	case imageBuildSlot <- struct{}{}:
+		return func() { <-imageBuildSlot }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+func hostMemoryBytes() int64 {
+	var info syscall.Sysinfo_t
+	if err := syscall.Sysinfo(&info); err != nil {
+		return 0
+	}
+	return int64(info.Totalram) * int64(info.Unit)
+}
+
+// resolveBuildLimits keeps only the pids cap where cpu/memory are not delegated:
+// RequireLimits would otherwise fail every CI build on such a host.
+func resolveBuildLimits(warn io.Writer) ociproc.Limits {
+	limits := buildLimits(cpuBudget(), hostMemoryBytes())
+	if ok, reason := ociproc.CgroupsV2Delegated(limits); !ok {
+		fmt.Fprintf(warn, "[sklp oci-build] warning: build runs without cpu/memory caps: %s\n", reason)
+		return ociproc.Limits{PidsMax: limits.PidsMax}
+	}
+	return limits
+}
 
 // buildStepRunner picks the step isolation for an application-image build.
 // RuncStepRunner runs each RUN in its own runc container (netns egress via
@@ -52,7 +85,7 @@ func buildStepRunner(cacheRoot string, stdout, stderr *os.File) runnerbuild.Step
 		SlirpBin:      slirpBin,
 		Stdout:        stdout,
 		Stderr:        stderr,
-		Limits:        ociproc.Limits{PidsMax: buildPidsLimit},
+		Limits:        resolveBuildLimits(stderr),
 		RequireLimits: InCI(),
 	}
 }
@@ -144,6 +177,11 @@ func NativeBuild(ctx context.Context, cfg NativeBuildConfig, stdout, stderr io.W
 	defer cleanupSecrets()
 
 	fmt.Fprintf(stdout, "[sklp oci-build] build %s for %s (%d stage(s))\n", imageRef, target, len(df.Stages))
+	releaseSlot, err := acquireImageBuildSlot(ctx)
+	if err != nil {
+		return err
+	}
+	defer releaseSlot()
 	var res imagebuild.Result
 	err = withFileWriters(stdout, stderr, func(outF, errF *os.File) error {
 		var buildErr error
