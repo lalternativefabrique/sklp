@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -24,9 +24,12 @@ import (
 //     to a dead credential — including plain `git push`, which then fails with
 //     "Invalid username or token" and no hint as to why.
 //
-// So off-sandbox we pass the same rewrite through GIT_CONFIG_COUNT/KEY/VALUE
-// instead. Git applies it to every invocation that inherits this environment
-// and to nothing else, so it disappears when the run does.
+// So off-sandbox the run gets a global config of its own through
+// GIT_CONFIG_GLOBAL: the user's settings minus their url rewrites, plus the
+// token one. A developer's own `https://github.com/ → git@github.com:` rewrite
+// shares the token rule's prefix, and git settles that tie on the rule it read
+// first, so a rule merely appended through GIT_CONFIG_COUNT never won against
+// ~/.gitconfig: the fetch went over ssh, to a host with no key.
 func WireGitHubToken(stderr io.Writer) error {
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
@@ -59,7 +62,7 @@ func WireGitHubToken(stderr io.Writer) error {
 				return fmt.Errorf("git config insteadOf: %w", err)
 			}
 		}
-	} else if err := exportGitConfigEnv(key, froms); err != nil {
+	} else if err := exportRunGitConfig(key, froms); err != nil {
 		return err
 	}
 
@@ -76,28 +79,60 @@ func WireGitHubToken(stderr io.Writer) error {
 	return nil
 }
 
-// exportGitConfigEnv appends one key/value pair per `from` to the process
-// environment using git's GIT_CONFIG_COUNT/KEY_n/VALUE_n protocol, preserving
-// any entries a caller already set.
-func exportGitConfigEnv(key string, froms []string) error {
-	count := 0
-	if existing := os.Getenv("GIT_CONFIG_COUNT"); existing != "" {
-		n, err := strconv.Atoi(existing)
-		if err != nil {
-			return fmt.Errorf("GIT_CONFIG_COUNT is not a number: %q", existing)
+// exportRunGitConfig writes the run's global git config and points
+// GIT_CONFIG_GLOBAL at it. It is rebuilt from the user's real global config on
+// every call, so the second wiring of a run sees the resolved token, not the
+// file the first one wrote.
+func exportRunGitConfig(key string, froms []string) error {
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("sklp-gitconfig-%d", os.Getpid()))
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("create run git config: %w", err)
+	}
+	f.Close()
+	for _, kv := range userGitConfig() {
+		k, v, _ := strings.Cut(kv, "=")
+		if isURLRewrite(k) {
+			continue
 		}
-		count = n
+		if err := runGitFile(path, "--add", k, v); err != nil {
+			return err
+		}
 	}
 	for _, from := range froms {
-		if err := os.Setenv(fmt.Sprintf("GIT_CONFIG_KEY_%d", count), key); err != nil {
-			return fmt.Errorf("export git config key: %w", err)
+		if err := runGitFile(path, "--add", key, from); err != nil {
+			return fmt.Errorf("git config insteadOf: %w", err)
 		}
-		if err := os.Setenv(fmt.Sprintf("GIT_CONFIG_VALUE_%d", count), from); err != nil {
-			return fmt.Errorf("export git config value: %w", err)
-		}
-		count++
 	}
-	return os.Setenv("GIT_CONFIG_COUNT", strconv.Itoa(count))
+	return os.Setenv("GIT_CONFIG_GLOBAL", path)
+}
+
+// userGitConfig lists the user's own global config as key=value lines. The
+// inherited GIT_CONFIG_GLOBAL is dropped so a rewire reads ~/.gitconfig, not
+// the file a previous wiring produced.
+func userGitConfig() []string {
+	cmd := exec.Command("git", "config", "--global", "--list")
+	cmd.Env = append(stripGitVars(os.Environ()), "GIT_DIR=/dev/null")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+	return strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+}
+
+func isURLRewrite(key string) bool {
+	k := strings.ToLower(key)
+	return strings.HasPrefix(k, "url.") && (strings.HasSuffix(k, ".insteadof") || strings.HasSuffix(k, ".pushinsteadof"))
+}
+
+func runGitFile(path string, args ...string) error {
+	cmd := exec.Command("git", append([]string{"config", "-f", path}, args...)...)
+	cmd.Env = append(stripGitVars(os.Environ()), "GIT_DIR=/dev/null")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git config failed: %w (%s)", err, redactToken(strings.TrimSpace(string(out))))
+	}
+	return nil
 }
 
 // MarkWorkspaceSafe registers repoPath as a git safe.directory, skipping the

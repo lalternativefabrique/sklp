@@ -1,7 +1,6 @@
 package pipeline
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -108,58 +107,49 @@ func TestRunGit_IgnoresBrokenGitEnv(t *testing.T) {
 	}
 }
 
-// On a developer machine the rewrite must NOT reach ~/.gitconfig: it would
-// outlive the run and redirect every later github operation to a token that
-// has since expired — including plain `git push`.
+// Off-sandbox the user's own config must stay untouched: the run gets a
+// global config of its own, which carries the user's settings minus their url
+// rewrites plus the token one, so the token wins even against an https→ssh
+// rewrite in ~/.gitconfig.
 func TestWireGitHubTokenOffSandboxLeavesUserConfigAlone(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
 	}
 	home := t.TempDir()
 	cfg := home + "/.gitconfig"
-	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	user := "[url \"git@github.com:\"]\n\tinsteadOf = https://github.com/\n[user]\n\tname = Someone\n"
+	if err := os.WriteFile(cfg, []byte(user), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", home+"/.config")
+	t.Setenv("GIT_CONFIG_GLOBAL", "")
+	os.Unsetenv("GIT_CONFIG_GLOBAL")
 	t.Setenv("GITHUB_TOKEN", "ghp_OFFSANDBOX123")
 	t.Setenv(RunnerModeEnv, "")
-	t.Setenv("GIT_CONFIG_COUNT", "")
 
 	if err := WireGitHubToken(io.Discard); err != nil {
 		t.Fatalf("WireGitHubToken: %v", err)
 	}
 
-	if b, err := os.ReadFile(cfg); err == nil && strings.Contains(string(b), "insteadOf") {
-		t.Fatalf("wrote an insteadOf rule into the user's config:\n%s", b)
+	if b, _ := os.ReadFile(cfg); string(b) != user {
+		t.Fatalf("the user's config changed:\n%s", b)
 	}
-	if got := os.Getenv("GIT_CONFIG_COUNT"); got != "3" {
-		t.Fatalf("GIT_CONFIG_COUNT = %q, want 3 (https, ssh://, scp-like)", got)
+	run := os.Getenv("GIT_CONFIG_GLOBAL")
+	if run == "" || run == cfg {
+		t.Fatalf("GIT_CONFIG_GLOBAL = %q, want the run's own file", run)
 	}
-	found := map[string]bool{}
-	for i := 0; i < 3; i++ {
-		if k := os.Getenv(fmt.Sprintf("GIT_CONFIG_KEY_%d", i)); !strings.Contains(k, "insteadOf") {
-			t.Fatalf("key %d = %q", i, k)
+	for _, from := range []string{"https://github.com/org/repo", "ssh://git@github.com/org/repo", "git@github.com:org/repo"} {
+		out, err := exec.Command("git", "ls-remote", "--get-url", from).Output()
+		if err != nil {
+			t.Fatal(err)
 		}
-		found[os.Getenv(fmt.Sprintf("GIT_CONFIG_VALUE_%d", i))] = true
-	}
-	for _, want := range []string{"https://github.com/", "ssh://git@github.com/", "git@github.com:"} {
-		if !found[want] {
-			t.Fatalf("rewrite for %q missing: %v", want, found)
+		if got := strings.TrimSpace(string(out)); got != "https://oauth2:ghp_OFFSANDBOX123@github.com/org/repo" {
+			t.Fatalf("%s rewritten to %q", from, got)
 		}
 	}
-}
-
-// A caller that already exported git config entries must keep them.
-func TestExportGitConfigEnvPreservesExisting(t *testing.T) {
-	t.Setenv("GIT_CONFIG_COUNT", "1")
-	t.Setenv("GIT_CONFIG_KEY_0", "safe.directory")
-	t.Setenv("GIT_CONFIG_VALUE_0", "/repo")
-
-	if err := exportGitConfigEnv("url.x.insteadOf", []string{"https://github.com/"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if os.Getenv("GIT_CONFIG_COUNT") != "2" {
-		t.Fatalf("count = %q, want 2", os.Getenv("GIT_CONFIG_COUNT"))
-	}
-	if os.Getenv("GIT_CONFIG_KEY_0") != "safe.directory" {
-		t.Fatal("clobbered a pre-existing entry")
+	name, _ := exec.Command("git", "config", "--global", "user.name").Output()
+	if strings.TrimSpace(string(name)) != "Someone" {
+		t.Fatalf("user settings lost: user.name = %q", name)
 	}
 }
