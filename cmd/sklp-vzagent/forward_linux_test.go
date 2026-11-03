@@ -13,6 +13,47 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func TestForwardSessionPassesTheTargetCloseToTheHost(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		_, _ = c.Write([]byte("bye"))
+		_ = c.Close()
+	}()
+
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := os.NewFile(uintptr(fds[0]), "host")
+	defer host.Close()
+	go forwardSession(os.NewFile(uintptr(fds[1]), "agent"))
+
+	if _, err := fmt.Fprintf(host, `{"port":%d}`, ln.Addr().(*net.TCPAddr).Port); err != nil {
+		t.Fatal(err)
+	}
+	read := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(host)
+		read <- string(b)
+	}()
+	select {
+	case got := <-read:
+		if got != "bye" {
+			t.Errorf("host read %q, want %q", got, "bye")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the target closed but the host never saw EOF: an idle keep-alive would be reused and hang")
+	}
+}
+
 func TestForwardSessionReplaysClientBytesWithoutTheRequestNewline(t *testing.T) {
 	for name, head := range map[string]string{
 		"host without newline": `{"port":%d}`,

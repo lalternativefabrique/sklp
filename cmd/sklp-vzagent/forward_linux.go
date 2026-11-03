@@ -109,6 +109,19 @@ func forwardSession(conn *os.File) {
 	go func() {
 		defer wg.Done()
 		_, _ = io.Copy(conn, target)
+		// A keep-alive the target closes must reach the host as EOF: otherwise
+		// the browser reuses the dead connection and its request hangs forever.
+		shutdownWrite(conn)
 	}()
 	wg.Wait()
+}
+
+func shutdownWrite(f *os.File) {
+	raw, err := f.SyscallConn()
+	if err != nil {
+		return
+	}
+	_ = raw.Control(func(fd uintptr) {
+		_ = unix.Shutdown(int(fd), unix.SHUT_WR)
+	})
 }
