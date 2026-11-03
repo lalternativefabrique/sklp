@@ -60,6 +60,7 @@ func rootCommand() cli.Command {
 			runnerCommand(),
 			hostCommand(),
 			pauseCommand(),
+			pid1Command(),
 			rawCmd("completion", "Emit shell completion script (bash | zsh | fish)", runCompletion),
 			versionCommand(),
 			{

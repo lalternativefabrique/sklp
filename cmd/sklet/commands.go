@@ -49,6 +49,7 @@ func rootCommand() cli.Command {
 				},
 			},
 			upgradeCommand(),
+			pid1Command(),
 			{
 				Name:   "__doc",
 				Hidden: true,

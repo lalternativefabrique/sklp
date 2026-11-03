@@ -859,3 +859,35 @@ func TestImageUser_ResolvesNamesFromTheImage(t *testing.T) {
 		t.Errorf("an image without etc/passwd: got (%d, %d, %v), want root and unknown", uid, gid, known)
 	}
 }
+
+func TestServiceSpec_ReapInitWrapsCommandAndBindsSklp(t *testing.T) {
+	svc := Service{Name: "app", Command: []string{"app", "serve"}, ReapInit: true}
+	spec := buildServiceSpec("/rootfs", svc, nil, nil, nil, "", 1000, 1000, nil)
+	b, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	args := m["process"].(map[string]any)["args"].([]any)
+	want := []any{pauseGuestPath, "__init", "--", "app", "serve"}
+	if len(args) != len(want) {
+		t.Fatalf("args = %v, want %v", args, want)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args = %v, want %v", args, want)
+		}
+	}
+	var bound bool
+	for _, raw := range m["mounts"].([]any) {
+		if raw.(map[string]any)["destination"] == pauseGuestPath {
+			bound = true
+		}
+	}
+	if !bound {
+		t.Fatalf("spec does not bind the running binary at %s", pauseGuestPath)
+	}
+}

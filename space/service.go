@@ -62,6 +62,8 @@ type Service struct {
 	// becomes sklp's own static binary, so parking never needs the guest's
 	// `sleep`/`sh`. See buildServiceSpecWithMappings.
 	PauseInit bool
+	// ReapInit wraps the command in `sklp __init` (see DeployService.ReapInit).
+	ReapInit bool
 
 	// Env is the process environment (KEY=value entries).
 	Env []string
