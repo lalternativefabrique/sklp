@@ -2,6 +2,7 @@ package space
 
 import (
 	"bufio"
+	"github.com/lalternativefabrique/sklp/space/muxport"
 	"net"
 	"strings"
 	"sync"
@@ -174,8 +175,8 @@ func TestHostMuxPortFor_Deterministic(t *testing.T) {
 	}
 	for _, s := range []string{"a", "feat-x", "abc123", "deadbeef"} {
 		p := HostMuxPortFor(s)
-		if p < hostMuxPortBase || p >= hostMuxPortBase+hostMuxPortSpan {
-			t.Fatalf("port %d for %q out of range [%d,%d)", p, s, hostMuxPortBase, hostMuxPortBase+hostMuxPortSpan)
+		if p < hostMuxPortBase || p >= hostMuxPortBase+muxport.Span {
+			t.Fatalf("port %d for %q out of range [%d,%d)", p, s, hostMuxPortBase, hostMuxPortBase+muxport.Span)
 		}
 	}
 }

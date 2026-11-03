@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 )
 
 // ForwardHostPorts publishes guest ports on the Mac's loopback for as long as
-// the caller keeps them: a dev stack's declared ports, which the daemon's own
-// list cannot know. A port the daemon or anything else already holds is left
-// alone. Does nothing when no VM daemon serves forwards.
+// the caller keeps them: a dev stack's declared ports and its host mux port.
+// Nothing is published ahead of time, so a port the stack does not use stays
+// free for the Mac's own tools (Metro on 8081, adb on 5037). A port something
+// already holds is left to it and named. Does nothing when no VM daemon serves
+// forwards.
 func ForwardHostPorts(ports []int) (release func()) {
 	sock := vzForwardSocketPath()
 	if !socketAlive(sock) {
@@ -22,6 +25,7 @@ func ForwardHostPorts(ports []int) (release func()) {
 	for _, port := range ports {
 		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "[sklp] macos: 127.0.0.1:%d is already taken on the Mac; the stack's port %d is not published there\n", port, port)
 			continue
 		}
 		listeners = append(listeners, ln)

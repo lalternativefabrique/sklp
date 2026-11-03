@@ -17,13 +17,11 @@ import (
 const forwardPort = 1025
 
 // Ports a service binds inside the VM are unreachable from the Mac: the NAT
-// attachment routes outbound only. The daemon therefore listens on the host's
-// loopback for each forwarded port and splices every accepted connection to
-// the same port inside the guest — so http://127.0.0.1:3000 in the browser
-// reaches the dev server the stack just printed a URL for.
+// attachment routes outbound only. A forward splices one host connection to the
+// same port inside the guest — so http://127.0.0.1:3000 in the browser reaches
+// the dev server the stack just printed a URL for.
 type portForward struct {
 	port   int
-	ln     net.Listener
 	warned atomic.Bool
 }
 
@@ -31,30 +29,6 @@ type portForward struct {
 func (f *portForward) warnUnreachable(err error) {
 	if f.warned.CompareAndSwap(false, true) {
 		fmt.Fprintf(os.Stderr, "[sklp] macos vm: :%d has no guest listener (%v)\n", f.port, err)
-	}
-}
-
-// forwardHostPort starts listening on 127.0.0.1:port and relays into the
-// guest. Returns a closer; a port already taken on the host is reported, not
-// silently skipped, since the developer would otherwise be told a URL that
-// answers with something else entirely.
-func forwardHostPort(port int) (*portForward, error) {
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
-	if err != nil {
-		return nil, fmt.Errorf("forward :%d: %w", port, err)
-	}
-	f := &portForward{port: port, ln: ln}
-	go f.accept()
-	return f, nil
-}
-
-func (f *portForward) accept() {
-	for {
-		conn, err := f.ln.Accept()
-		if err != nil {
-			return // listener closed
-		}
-		go f.pipe(conn)
 	}
 }
 
@@ -118,49 +92,6 @@ func (f *portForward) pipe(host net.Conn) {
 // SKLP_DEBUG_FWD=1; per-connection lines are far too chatty to keep on.
 var debugForwards = os.Getenv("SKLP_DEBUG_FWD") == "1"
 
-func (f *portForward) Close() error { return f.ln.Close() }
-
 type forwardRequest struct {
 	Port int `json:"port"`
-}
-
-// defaultForwardPorts are published without being asked for. The host mux
-// range is what `sklp dev` prints its ingress URLs against, and 3000/5273 are
-// the dev servers a stack binds directly.
-//
-// Announcing a fixed set is a stopgap: the honest fix is to publish what the
-// guest actually listens on, which needs the runtime to report its bindings.
-func defaultForwardPorts() []int {
-	ports := []int{3000, 4100, 5273, 4000, 5173}
-	// The per-worktree host mux port is derived by hashing the scope id into
-	// [8080, 9080), and the daemon does not know which worktree a later command
-	// will run in — so the whole range is published. Listening on a loopback
-	// port is a socket and an accept goroutine, nothing more, and the ones
-	// already taken on the host are skipped.
-	for p := hostMuxPortBase; p < hostMuxPortBase+hostMuxPortSpan; p++ {
-		ports = append(ports, p)
-	}
-	return ports
-}
-
-// Kept in sync with space.hostMuxPortBase / hostMuxPortSpan, which cannot be
-// imported here: that package is linux-only.
-const (
-	hostMuxPortBase = 8080
-	hostMuxPortSpan = 1000
-)
-
-// startForwards publishes the default ports, reporting the ones already taken
-// on the host instead of failing the VM over them.
-func startForwards() []*portForward {
-	var out []*portForward
-	for _, p := range defaultForwardPorts() {
-		f, err := forwardHostPort(p)
-		if err != nil {
-			continue // taken on the host: leave whatever owns it alone
-		}
-		out = append(out, f)
-	}
-	fmt.Fprintf(os.Stderr, "[sklp] macos vm: forwarding %d ports from the guest\n", len(out))
-	return out
 }

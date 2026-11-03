@@ -233,15 +233,6 @@ func RunDaemon() error {
 	go func() { bridgeErr <- serveBridge(stop) }()
 	go func() { bridgeErr <- serveForwardBridge(stop) }()
 
-	// Publish the guest's ports on the host loopback, so the URLs the stack
-	// prints actually resolve from the Mac's browser.
-	forwards := startForwards()
-	defer func() {
-		for _, f := range forwards {
-			_ = f.Close()
-		}
-	}()
-
 	fmt.Fprintf(os.Stderr, "[sklp] macos vm: up (pid %d, socket %s)\n", os.Getpid(), vzSocketPath())
 
 	vmGone := make(chan struct{})
@@ -302,7 +293,7 @@ const vmWatchInterval = time.Second
 // watchVM closes gone once the guest is no longer running, so the daemon tears
 // its host forwards down with it. Without this the daemon only ever woke on a
 // signal or a bridge failure: a VM that died — or a configuration the
-// hypervisor rejected outright, which still ran startForwards first — left
+// hypervisor rejected outright, which still published its forwards first — left
 // every forwarded port listening on the host with nothing behind it, answering
 // each connection with an immediate close (ERR_EMPTY_RESPONSE) instead of the
 // connection refused that would name the real problem.

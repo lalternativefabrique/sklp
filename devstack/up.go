@@ -155,7 +155,7 @@ func Up(ctx context.Context, cfg DevConfig) error {
 	if !ok {
 		// Off Linux, relayDevLima replaces this process with the same
 		// invocation inside a Lima VM and never returns.
-		if err := relayDevLima(cfg); err != nil {
+		if err := relayDevLima(cfg, space); err != nil {
 			return devErr(1, "sklp dev: embedded runc runtime unavailable — %v", err)
 		}
 		return devErr(1, "sklp dev: lima relay returned without exec")
