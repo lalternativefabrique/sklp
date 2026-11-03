@@ -141,14 +141,10 @@ func isResidualPause(pid int) bool {
 	// Current form: `sklp pause`. arg0 is the baked binary ("sklp") when the
 	// recipe installed it, but the BIND-MOUNTED form is /.sklp/pause, whose
 	// basename is "pause" — accept both or every bind-mounted runner's pause
-	// reads as real work and its cgroup is never reclaimed.
+	// reads as real work and its cgroup is never reclaimed. The same binary
+	// as `__init -- <cmd>` IS real work.
 	if base := filepath.Base(args[0]); base == "sklp" || base == "pause" {
-		for _, a := range args[1:] {
-			if a == "pause" {
-				return true
-			}
-		}
-		return false
+		return len(args) >= 2 && args[1] == "pause"
 	}
 	// Legacy form: `sleep <big>`. The keep-alive uses a huge sleep; treat any
 	// multi-year sleep as the pause. Drop this branch a few releases out.

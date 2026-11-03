@@ -377,6 +377,12 @@ func buildServiceSpecWithMappings(rootfs string, svc Service, imgEntrypoint, img
 	if svc.PauseInit {
 		pauseBin, mnt := resolvePauseInit(rootfs)
 		args, pauseMount = []string{pauseBin, "pause"}, mnt
+	} else if svc.ReapInit {
+		// Always the running binary: an image that bakes an older sklp has no
+		// `__init`, and without a bind the service runs unwrapped, never broken.
+		if mnt := selfBindMount(); mnt != nil {
+			args, pauseMount = append([]string{pauseGuestPath, "__init", "--"}, args...), mnt
+		}
 	}
 	// A deployed service gets the narrow service baseline, not the CI runner's
 	// set, plus whatever its manifest asked for explicitly.
@@ -523,17 +529,26 @@ func resolvePauseInit(rootfs string) (string, map[string]any) {
 	if baked := filepath.Join(rootfs, "usr/local/bin/sklp"); fileExists(baked) {
 		return "/usr/local/bin/sklp", nil
 	}
-	self, err := os.Readlink("/proc/self/exe")
-	if err != nil || self == "" {
+	mnt := selfBindMount()
+	if mnt == nil {
 		return "sklp", nil // last resort: hope PATH has it
 	}
-	mnt := map[string]any{
+	return pauseGuestPath, mnt
+}
+
+// selfBindMount binds the running binary read-only at pauseGuestPath, or nil
+// when /proc/self/exe cannot be resolved.
+func selfBindMount() map[string]any {
+	self, err := os.Readlink("/proc/self/exe")
+	if err != nil || self == "" {
+		return nil
+	}
+	return map[string]any{
 		"destination": pauseGuestPath,
 		"type":        "bind",
 		"source":      self,
 		"options":     []string{"bind", "ro", "nosuid", "nodev"},
 	}
-	return pauseGuestPath, mnt
 }
 
 // fileExists reports whether path is an existing (non-dir-checked) file.

@@ -79,6 +79,7 @@ func (l *runcLauncher) Start(ctx context.Context, svc Service) (int, error) {
 			PidsMax:     svc.Resources.PidsMax,
 		},
 		RequireResources: svc.Resources.Require,
+		ReapInit:         true,
 	})
 }
 

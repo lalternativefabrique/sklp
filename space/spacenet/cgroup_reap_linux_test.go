@@ -77,9 +77,15 @@ func TestIsResidualPauseAcceptsBindMountedPause(t *testing.T) {
 }
 
 func TestIsResidualPauseRejectsRealWorkload(t *testing.T) {
-	pid := fixtureProc(t, "/usr/local/bin/nats-server\x00-js\x00")
-	if isResidualPause(pid) {
-		t.Fatal("nats-server recognised as a pause; a real workload must never be reaped")
+	for _, cmdline := range []string{
+		"/usr/local/bin/nats-server\x00-js\x00",
+		"/.sklp/pause\x00__init\x00--\x00nats-server\x00-js\x00",
+		"/.sklp/pause\x00__init\x00--\x00app\x00pause\x00",
+	} {
+		pid := fixtureProc(t, cmdline)
+		if isResidualPause(pid) {
+			t.Fatalf("cmdline %q recognised as a pause; a real workload must never be reaped", cmdline)
+		}
 	}
 }
 

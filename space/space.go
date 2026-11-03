@@ -51,6 +51,11 @@ type DeployService struct {
 	// which a minimal space.yaml rootfs does not ship.
 	PauseInit bool
 
+	// ReapInit runs Command under `sklp __init`, a PID 1 that forwards signals
+	// and reaps orphans, so a service whose process spawns children without
+	// waiting for them cannot fill the node's pid budget with zombies.
+	ReapInit bool
+
 	// WorkdirOverride, when non-empty, replaces the image's WorkingDir as the
 	// container cwd. `sklp deploy` leaves it "" (image default); `sklp dev`
 	// sets it to the in-container mount point of the repo so a `run:` command
@@ -501,7 +506,7 @@ func (s *Space) Start(ctx context.Context, svc DeployService) (int, error) {
 		return 0, fmt.Errorf("deploy space: service %q resources: %w", svc.Name, err)
 	}
 
-	rtSvc := Service{Name: svc.Name, Image: svc.Image, Command: svc.Command, Env: svc.Env, DevMounts: mounts, IgnoreEntrypoint: svc.IgnoreEntrypoint, NestedRuntime: svc.NestedRuntime, HostNetwork: svc.HostNetwork, PauseInit: svc.PauseInit, Capabilities: svc.Capabilities, Resources: limits.applied, CgroupsPath: limits.cgroupsPath, ImageUID: containerUID, ImageGID: containerGID}
+	rtSvc := Service{Name: svc.Name, Image: svc.Image, Command: svc.Command, Env: svc.Env, DevMounts: mounts, IgnoreEntrypoint: svc.IgnoreEntrypoint, NestedRuntime: svc.NestedRuntime, HostNetwork: svc.HostNetwork, PauseInit: svc.PauseInit, ReapInit: svc.ReapInit, Capabilities: svc.Capabilities, Resources: limits.applied, CgroupsPath: limits.cgroupsPath, ImageUID: containerUID, ImageGID: containerGID}
 	workdir := imgCfg.Config.WorkingDir
 	if svc.WorkdirOverride != "" {
 		workdir = svc.WorkdirOverride
