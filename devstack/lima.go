@@ -4,13 +4,15 @@ import (
 	"os"
 
 	"github.com/lalternativefabrique/sklp/internal/limarelay"
+	"github.com/lalternativefabrique/sklp/space/muxport"
 )
 
 // relayDevLima replays this `sklp dev` invocation inside the Lima VM (see
 // limarelay). It only returns on failure; on Linux it reports why the
 // embedded runtime is unavailable instead.
-func relayDevLima(cfg DevConfig) error {
-	release := limarelay.ForwardHostPorts(declaredPorts(cfg.TaskPath))
+func relayDevLima(cfg DevConfig, spaceName string) error {
+	ports := append(declaredPorts(cfg.TaskPath), muxport.For(spaceName))
+	release := limarelay.ForwardHostPorts(ports)
 	defer release()
 	return limarelay.RelaySelf(cfg.Repo)
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/lalternativefabrique/sklp/space/muxport"
 	"io"
 	"net"
 	"net/http"
@@ -15,17 +16,7 @@ import (
 	"time"
 )
 
-// hostMuxPortBase is the bottom of the unprivileged port range the per-worktree
-// mux port is derived into. High port (not :80) so the bind needs no root: a
-// normal dev runs `sklp dev` unprivileged. macOS-friendly: a loopback high port
-// on 127.0.0.1 binds identically on Linux and macOS, unlike a 127.0.0.x alias.
-const hostMuxPortBase = 8080
-
-// hostMuxPortSpan caps the derived range [8080, 8080+span). One port per live
-// `sklp dev` (worktree). The derived port is STABLE per worktree (bookmarkable);
-// a fallback walks +1 on collision so two worktrees hashing to the same port
-// still both come up.
-const hostMuxPortSpan = 1000
+const hostMuxPortBase = muxport.Base
 
 // hostMuxMaxProbe bounds the +1 fallback walk so a saturated range fails fast
 // rather than spinning. Far above any realistic count of parallel dev stacks.
@@ -126,16 +117,7 @@ func listenLoopbackFrom(base int) (net.Listener, int, error) {
 // devScopeID hash). Same worktree → same port (bookmarkable); the bind-time +1
 // fallback resolves the rare cross-worktree hash collision. Empty scope falls
 // back to the base port.
-func HostMuxPortFor(scope string) int {
-	if scope == "" {
-		return hostMuxPortBase
-	}
-	var acc uint32
-	for i := 0; i < len(scope); i++ {
-		acc = acc*31 + uint32(scope[i])
-	}
-	return hostMuxPortBase + int(acc%hostMuxPortSpan)
-}
+func HostMuxPortFor(scope string) int { return muxport.For(scope) }
 
 // register maps host -> route. Idempotent: a re-register (second replica Ready)
 // overwrites with the same target. Host is normalised to lower-case, no port.
