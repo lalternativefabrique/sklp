@@ -10,6 +10,7 @@ import (
 const (
 	RolloutRolling    = "rolling"
 	RolloutSoaking    = "soaking"
+	RolloutDraining   = "draining"
 	RolloutSucceeded  = "succeeded"
 	RolloutRolledBack = "rolled_back"
 	RolloutSuperseded = "superseded"
@@ -19,6 +20,12 @@ const (
 	// its port and dies right after passes a TCP probe; only time tells it apart
 	// from a healthy one.
 	defaultSoak = 60 * time.Second
+	// defaultDrain caps how long, after the soak, the previous generation is
+	// kept for the connections still established to it. New connections stop
+	// reaching it at cutover, so the count only falls; the cap is for the one
+	// that never closes.
+	defaultDrain = 10 * time.Minute
+	drainPoll    = 2 * time.Second
 
 	defaultProbeInterval = 10 * time.Second
 	defaultProbeFailures = 3
@@ -71,6 +78,15 @@ func (a *Agent) soakFor(svc Service) time.Duration {
 	return a.opts.Soak
 }
 
+func (a *Agent) drainFor(svc Service) time.Duration {
+	if svc.Ready != nil && svc.Ready.Drain != "" {
+		if d, err := time.ParseDuration(svc.Ready.Drain); err == nil && d >= 0 {
+			return d
+		}
+	}
+	return a.opts.Drain
+}
+
 func (st *serviceState) isNewID(id string) bool {
 	for _, n := range st.newIDs {
 		if n == id {
@@ -81,7 +97,10 @@ func (st *serviceState) isNewID(id string) bool {
 }
 
 func (st *serviceState) rolloutPhase() string {
-	if st.soaking {
+	switch {
+	case st.draining:
+		return RolloutDraining
+	case st.soaking:
 		return RolloutSoaking
 	}
 	return RolloutRolling
@@ -114,13 +133,63 @@ func (a *Agent) cutoverLocked(st *serviceState) {
 	a.syncACLLocked()
 
 	soak := a.soakFor(st.newSpec)
-	if st.newSpec.Oneshot || soak == 0 {
+	if st.newSpec.Oneshot {
 		a.completeRolloutLocked(st)
+		return
+	}
+	if soak == 0 {
+		a.beginDrainLocked(st)
 		return
 	}
 	st.soaking = true
 	st.soakAt = time.Now().Add(soak)
 	a.logger.Printf("service %q: cutover done, soaking for %v before the previous version is stopped", svcName, soak)
+}
+
+// beginDrainLocked keeps the previous generation, already de-routed, until no
+// connection is established to it any more, or the drain cap is reached. A
+// generation whose connections cannot be observed, or one already stopped,
+// completes at once. Caller holds a.mu.
+func (a *Agent) beginDrainLocked(st *serviceState) {
+	st.soaking = false
+	st.soakAt = time.Time{}
+	drain := a.drainFor(st.newSpec)
+	if drain == 0 || st.stoppedOld || a.connCounter == nil {
+		a.completeRolloutLocked(st)
+		return
+	}
+	st.draining = true
+	st.drainAt = time.Now().Add(drain)
+	st.drainPollAt = time.Now()
+	a.logger.Printf("service %q: soak over, draining the previous version's connections (cap %v)", st.spec.Name, drain)
+}
+
+// advanceDrainLocked stops the previous generation once nothing is established
+// to it, or at the cap, noting what was cut. Caller holds a.mu.
+func (a *Agent) advanceDrainLocked(st *serviceState) {
+	open := 0
+	for _, id := range st.oldIDs {
+		inst := a.instances[id]
+		if inst == nil || inst.pid == 0 {
+			continue
+		}
+		n, ok := a.connCounter(inst)
+		if !ok {
+			continue
+		}
+		open += n
+	}
+	now := time.Now()
+	switch {
+	case open == 0:
+		a.completeRolloutLocked(st)
+	case now.After(st.drainAt):
+		st.drainNote = fmt.Sprintf("drain cap reached with %d connection(s) still established to the previous version", open)
+		a.logger.Printf("service %q: %s", st.spec.Name, st.drainNote)
+		a.completeRolloutLocked(st)
+	default:
+		st.drainPollAt = now.Add(drainPoll)
+	}
 }
 
 // completeRolloutLocked promotes the new generation: it becomes the
@@ -129,6 +198,7 @@ func (a *Agent) cutoverLocked(st *serviceState) {
 func (a *Agent) completeRolloutLocked(st *serviceState) {
 	svcName := st.spec.Name
 	rec := st.inFlightRecord()
+	rec.Reason = st.drainNote
 	st.spec = st.newSpec
 	for _, id := range st.oldIDs {
 		if inst := a.instances[id]; inst != nil {
@@ -197,7 +267,7 @@ func (a *Agent) abortRolloutLocked(st *serviceState, result, reason string, exit
 		}
 		a.logger.Printf("service %q: rolling update %s (%s); relaunching the previous version, stopped for the rollout", svcName, result, reason)
 	default:
-		if st.soaking {
+		if st.soaking || st.draining {
 			for _, id := range st.oldIDs {
 				if inst := a.instances[id]; inst != nil {
 					inst.retired = false
@@ -234,10 +304,14 @@ func (a *Agent) candidateLogTailLocked(st *serviceState) []string {
 func (a *Agent) resetRolloutLocked(st *serviceState) {
 	st.rolling = false
 	st.soaking = false
+	st.draining = false
+	st.drainNote = ""
 	st.newIDs = nil
 	st.oldIDs = nil
 	st.rolloutAt = time.Time{}
 	st.soakAt = time.Time{}
+	st.drainAt = time.Time{}
+	st.drainPollAt = time.Time{}
 	st.stoppedOld = false
 	st.newCrashes = 0
 }

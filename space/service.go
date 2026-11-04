@@ -145,6 +145,7 @@ type ServiceReady struct {
 	File    string
 	Timeout string // Go duration string; empty = default 30s.
 	Soak    string // Go duration string; how long a new generation must stay Ready after cutover. Empty = supervisor default.
+	Drain   string // Go duration string; cap on keeping the previous generation for its established connections after the soak. Empty = supervisor default.
 }
 
 // ServiceFromSchema maps the loss-less primitives of a runner.Service

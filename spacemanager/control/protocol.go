@@ -224,10 +224,11 @@ const HeaderExecExitCode = "X-Sklp-Exit-Code"
 // Rollout result values carried by RolloutState.Result. They mirror the
 // supervisor's own constants (spacemanager/rollout.go), restated here so a
 // client can read them without the embedded-only package: "rolling" and
-// "soaking" are in flight, the rest are terminal.
+// "soaking" and "draining" are in flight, the rest are terminal.
 const (
 	RolloutRolling    = "rolling"
 	RolloutSoaking    = "soaking"
+	RolloutDraining   = "draining"
 	RolloutSucceeded  = "succeeded"
 	RolloutRolledBack = "rolled_back"
 	RolloutSuperseded = "superseded"
