@@ -38,8 +38,11 @@ func (r NodeRollout) Terminal() bool {
 
 // MatchRollout picks, among a node's rollouts, the one a roll started: same
 // service, same target image, and not older than the roll itself (allowing
-// for clock skew between core and node). The latest such record wins, so a
-// re-roll of the same image after a rollback reads its own outcome.
+// for clock skew between core and node). The first such record to settle is
+// the roll's outcome; later ones are re-rolls of the same image, started by a
+// sibling's apply, and following them delays the outcome by one soak each,
+// past any observation window. While none has settled, the latest is the one
+// still worth watching.
 func MatchRollout(rollouts []NodeRollout, service, image string, notBefore time.Time) *NodeRollout {
 	return MatchRolloutExcluding(rollouts, service, image, notBefore, nil)
 }
@@ -48,7 +51,7 @@ func MatchRollout(rollouts []NodeRollout, service, image string, notBefore time.
 // listed before the roll was posted. The skew window alone let a re-roll of a
 // tag the node had just rolled back read that earlier outcome as its own.
 func MatchRolloutExcluding(rollouts []NodeRollout, service, image string, notBefore time.Time, prior map[string]bool) *NodeRollout {
-	var best *NodeRollout
+	var settled, latest *NodeRollout
 	for i := range rollouts {
 		r := &rollouts[i]
 		if r.Service != service || r.ToImage != image || prior[r.ID] {
@@ -57,9 +60,15 @@ func MatchRolloutExcluding(rollouts []NodeRollout, service, image string, notBef
 		if r.StartedAt.Before(notBefore.Add(-2 * time.Minute)) {
 			continue
 		}
-		if best == nil || r.StartedAt.After(best.StartedAt) {
-			best = r
+		if r.Terminal() && r.Result != NodeRolloutSuperseded && (settled == nil || r.StartedAt.Before(settled.StartedAt)) {
+			settled = r
+		}
+		if latest == nil || r.StartedAt.After(latest.StartedAt) {
+			latest = r
 		}
 	}
-	return best
+	if settled != nil {
+		return settled
+	}
+	return latest
 }

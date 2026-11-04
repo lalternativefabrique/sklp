@@ -38,3 +38,26 @@ func TestMatchRolloutExcludingSkipsPriorRollouts(t *testing.T) {
 		t.Fatalf("got %+v, want the rollout started after the roll", got)
 	}
 }
+
+// TestMatchRolloutReadsTheFirstSettledRollout: partage-core 2026-11-04. The
+// node re-rolled the image a roll had just landed, once per sibling apply,
+// each starting as the previous one ended. Following the latest record kept
+// the roll unsettled for as long as the chain lasted.
+func TestMatchRolloutReadsTheFirstSettledRollout(t *testing.T) {
+	now := time.Now()
+	rollouts := []NodeRollout{
+		{ID: "core-r1", Service: "core", ToImage: "r/core:b", Result: NodeRolloutSucceeded, StartedAt: now.Add(-6 * time.Minute), FinishedAt: now.Add(-3 * time.Minute)},
+		{ID: "core-r2", Service: "core", ToImage: "r/core:b", Result: NodeRolloutSucceeded, StartedAt: now.Add(-3 * time.Minute), FinishedAt: now},
+		{ID: "core-r3", Service: "core", ToImage: "r/core:b", Result: NodeRolloutSoaking, StartedAt: now},
+	}
+	if got := MatchRollout(rollouts, "core", "r/core:b", now.Add(-7*time.Minute)); got == nil || got.ID != "core-r1" {
+		t.Fatalf("got %+v, want the first rollout to settle", got)
+	}
+	superseded := []NodeRollout{
+		{ID: "core-r1", Service: "core", ToImage: "r/core:b", Result: NodeRolloutSuperseded, StartedAt: now.Add(-6 * time.Minute), FinishedAt: now.Add(-5 * time.Minute)},
+		{ID: "core-r2", Service: "core", ToImage: "r/core:b", Result: NodeRolloutRolledBack, StartedAt: now.Add(-5 * time.Minute), FinishedAt: now.Add(-2 * time.Minute)},
+	}
+	if got := MatchRollout(superseded, "core", "r/core:b", now.Add(-7*time.Minute)); got == nil || got.ID != "core-r2" {
+		t.Fatalf("got %+v, want the replacement of a superseded rollout", got)
+	}
+}
