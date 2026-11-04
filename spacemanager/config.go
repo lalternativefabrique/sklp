@@ -1707,14 +1707,12 @@ func envVarRefs(raw []byte) (map[string]string, error) {
 	type decl struct {
 		service  string
 		template string
+		literal  bool
 	}
 	byKey := map[string][]decl{}
 	gather := func(service string, env map[string]string) {
 		for key, val := range env {
-			if len(TemplateVarNames(val)) == 0 {
-				continue
-			}
-			byKey[key] = append(byKey[key], decl{service: service, template: val})
+			byKey[key] = append(byKey[key], decl{service: service, template: val, literal: len(TemplateVarNames(val)) == 0})
 		}
 	}
 	for name, s := range probe.Services {
@@ -1743,6 +1741,10 @@ func envVarRefs(raw []byte) (map[string]string, error) {
 	// conflict — and all of those are already deployed. A contested key is
 	// scoped for EVERY declaring service, never just the losers: leaving one
 	// of them on the bare key is what made the output order-dependent.
+	// A literal declaration contests the key too: a bare ref would be applied
+	// to that service on the next manifest load, replacing the value it
+	// declared with another service's template — a spec that then differs
+	// from the one applied, rolling the service on every sibling's apply.
 	out := map[string]string{}
 	for key, decls := range byKey {
 		contested := false
@@ -1753,11 +1755,15 @@ func envVarRefs(raw []byte) (map[string]string, error) {
 			}
 		}
 		if !contested {
-			out[key] = decls[0].template
+			if !decls[0].literal {
+				out[key] = decls[0].template
+			}
 			continue
 		}
 		for _, d := range decls {
-			out[ScopedEnvKey(d.service, key)] = d.template
+			if !d.literal {
+				out[ScopedEnvKey(d.service, key)] = d.template
+			}
 		}
 	}
 	return out, nil
