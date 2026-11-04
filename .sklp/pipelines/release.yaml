@@ -3,6 +3,7 @@ kind: pipeline
 name: release
 
 # Started by name on a tagged main: `git tag -a vX.Y.Z && sklp run release`.
+# The notes cover everything since the last published release, ADRs first.
 # Builds sklp, sklet and sklp-relay-bridge for linux and darwin, skt at the
 # version scripts/skt.pin names, uploads the set to the dist bucket under
 # the tag and latest/ (what the installers read), and publishes the same
@@ -49,7 +50,11 @@ steps:
         export PATH="/tmp/awsbin:$PATH"
       fi
       SKLP_RELEASE="$tag" scripts/build-cli-binaries.sh "$tag"
-      previous="$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)"
+      if ! command -v gh >/dev/null; then
+        curl -fsSL https://github.com/cli/cli/releases/download/v2.86.0/gh_2.86.0_linux_amd64.tar.gz | tar -xz -C /tmp
+        export PATH="/tmp/gh_2.86.0_linux_amd64/bin:$PATH"
+      fi
+      previous="$(gh release list --exclude-drafts --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || true)"
       {
         for adr in $(git diff --name-only --diff-filter=A ${previous:+$previous..}$tag -- docs/adr/ | sort); do
           sed -e '1s/^# [0-9]*\. /## /' -e '2,$s/^## /### /' "$adr"; echo
@@ -62,9 +67,5 @@ steps:
         echo '```'
         echo; echo "skt $(tr -d '[:space:]' < scripts/skt.pin) is bundled."
       } > "dist/cli/$tag/NOTES.md"
-      if ! command -v gh >/dev/null; then
-        curl -fsSL https://github.com/cli/cli/releases/download/v2.86.0/gh_2.86.0_linux_amd64.tar.gz | tar -xz -C /tmp
-        export PATH="/tmp/gh_2.86.0_linux_amd64/bin:$PATH"
-      fi
       gh release create "$tag" --verify-tag --title "sklp $tag" --notes-file "dist/cli/$tag/NOTES.md" \
         "dist/cli/$tag/"sklp-* "dist/cli/$tag/"sklet-* "dist/cli/$tag/"skt-* "dist/cli/$tag/SHA256SUMS"

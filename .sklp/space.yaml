@@ -5,6 +5,7 @@ runner:
 
   packages:
     - git
+    - unzip
     - ca-certificates
     - gcc
     - libc6-dev
