@@ -179,3 +179,59 @@ func TestEnvVarRefs_IsStableAcrossParses(t *testing.T) {
 		}
 	}
 }
+
+// partage-core 2026-11-04: core declares NATS_URL as a literal, the backup
+// job declares it with a password template. The bare ref the job produced
+// was applied to core on every manifest load, so the spec read back differed
+// from the spec applied, and core rolled again each time a sibling moved.
+const literalAgainstTemplateDeploy = `
+version: 1
+kind: deploy
+name: partage
+services:
+  core:
+    image: example.com/core:1
+    env:
+      NATS_URL: nats://nats:4222
+jobs:
+  nats-backup:
+    image: example.com/nats-backup:1
+    schedule: "15 * * * *"
+    env:
+      NATS_URL: nats://app:${NATS_PASSWORD}@nats:4222
+`
+
+func TestEnvRefs_ALiteralKeepsItsValueNextToATemplateOfTheSameKey(t *testing.T) {
+	lookup := func(name string) (string, bool) {
+		v, ok := map[string]string{"NATS_PASSWORD": "pw"}[name]
+		return v, ok
+	}
+	cfg, err := ParseWith([]byte(literalAgainstTemplateDeploy), lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	services, meta, err := cfg.Resolve("production", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, bare := meta.EnvRefs["NATS_URL"]; bare {
+		t.Fatalf("NATS_URL kept a bare ref although core declares it literally: %v", meta.EnvRefs)
+	}
+	back := ResolveEnvRefsWith(StripEnvRefs(services, meta.EnvRefs), meta.EnvRefs, lookup)
+	for _, svc := range back {
+		joined := strings.Join(svc.Env, " ")
+		switch svc.Name {
+		case "core":
+			if !strings.Contains(joined, "NATS_URL=nats://nats:4222") {
+				t.Errorf("core came back with %q, want its own literal NATS_URL", joined)
+			}
+			if !SameSpec(svc, services[0]) && services[0].Name == "core" {
+				t.Errorf("core differs from the spec that was applied")
+			}
+		case "nats-backup":
+			if !strings.Contains(joined, "NATS_URL=nats://app:pw@nats:4222") {
+				t.Errorf("nats-backup came back with %q, want its template resolved", joined)
+			}
+		}
+	}
+}
