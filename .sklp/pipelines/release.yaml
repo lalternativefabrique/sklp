@@ -51,6 +51,9 @@ steps:
       SKLP_RELEASE="$tag" scripts/build-cli-binaries.sh "$tag"
       previous="$(git describe --tags --abbrev=0 "$tag^" 2>/dev/null || true)"
       {
+        for adr in $(git diff --name-only --diff-filter=A ${previous:+$previous..}$tag -- docs/adr/ | sort); do
+          sed -e '1s/^# [0-9]*\. /## /' -e '2,$s/^## /### /' "$adr"; echo
+        done
         echo "## Changes"; echo
         git log --format='- %s' ${previous:+$previous..}$tag
         echo; echo "## Install"; echo

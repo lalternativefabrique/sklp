@@ -355,6 +355,7 @@ type ReadySpec struct {
 	File    string `yaml:"file"`
 	Timeout string `yaml:"timeout"`
 	Soak    string `yaml:"soak"`
+	Drain   string `yaml:"drain"`
 }
 
 func (r *ReadySpec) toProbe() *Probe {
@@ -368,6 +369,7 @@ func (r *ReadySpec) toProbe() *Probe {
 		File:    r.File,
 		Timeout: r.Timeout,
 		Soak:    r.Soak,
+		Drain:   r.Drain,
 	}
 }
 

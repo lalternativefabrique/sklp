@@ -7,6 +7,7 @@ import "time"
 const (
 	NodeRolloutRolling    = "rolling"
 	NodeRolloutSoaking    = "soaking"
+	NodeRolloutDraining   = "draining"
 	NodeRolloutSucceeded  = "succeeded"
 	NodeRolloutRolledBack = "rolled_back"
 	NodeRolloutSuperseded = "superseded"
@@ -29,7 +30,7 @@ type NodeRollout struct {
 // Terminal reports whether the node is done with this rollout.
 func (r NodeRollout) Terminal() bool {
 	switch r.Result {
-	case NodeRolloutRolling, NodeRolloutSoaking:
+	case NodeRolloutRolling, NodeRolloutSoaking, NodeRolloutDraining:
 		return false
 	}
 	return true

@@ -126,8 +126,14 @@ type serviceState struct {
 	// soaking is the window after cutover during which the old generation is
 	// de-routed but still alive, so a crash of the new one is undone by routing
 	// back. newCrashes counts the new generation's deaths before its first Ready.
-	soaking      bool
-	soakAt       time.Time
+	soaking bool
+	soakAt  time.Time
+	// draining follows the soak: the old generation stays until no connection
+	// is established to it, or drainAt. drainNote records a cut at the cap.
+	draining     bool
+	drainAt      time.Time
+	drainPollAt  time.Time
+	drainNote    string
 	newCrashes   int
 	rolloutID    string
 	rolloutStart time.Time
@@ -187,6 +193,10 @@ type Options struct {
 	// Soak is how long a new generation must stay Ready after cutover before
 	// the previous one is stopped; a service's ready.soak overrides it.
 	Soak time.Duration
+	// Drain caps how long, after the soak, the previous generation is kept
+	// while connections are still established to it; a service's ready.drain
+	// overrides it.
+	Drain time.Duration
 	// ProbeInterval is how often a Ready instance is re-probed; ProbeFailures
 	// consecutive failures degrade it (out of the proxy, not restarted) and
 	// one success re-admits it.
@@ -259,6 +269,7 @@ type Agent struct {
 	gwback      gatewayBackender                           // host-reachable backend for domained services; nil when unsupported
 	l7          l7Router                                   // native in-worker L7 ingress route push; nil when unsupported
 	ipPort      ipPortProvider                             // per-instance container IP+port; nil when unsupported
+	connCounter func(inst *instance) (int, bool)           // established connections to an instance; nil when unobservable
 	acl         aclApplier                                 // east-west forward-chain ACL push; nil when unsupported
 	opts        Options
 	logger      *log.Logger
@@ -308,6 +319,9 @@ func NewAgent(launcher Launcher, ready readyChecker, desired []Service, opts Opt
 	}
 	if opts.Soak == 0 {
 		opts.Soak = defaultSoak
+	}
+	if opts.Drain == 0 {
+		opts.Drain = defaultDrain
 	}
 	if opts.ProbeInterval == 0 {
 		opts.ProbeInterval = defaultProbeInterval
@@ -359,6 +373,7 @@ func NewAgent(launcher Launcher, ready readyChecker, desired []Service, opts Opt
 	// this, polling read-only rather than being pushed to by Space.
 	if ip, ok := launcher.(ipPortProvider); ok {
 		a.ipPort = ip
+		a.connCounter = a.procNetConns
 	}
 	if r, ok := launcher.(l7Router); ok {
 		a.l7 = r
@@ -602,6 +617,8 @@ func (a *Agent) nextDeadlineTimer(ctx context.Context) <-chan time.Time {
 		if st.rolling {
 			consider(st.rolloutAt)
 			consider(st.soakAt)
+			consider(st.drainAt)
+			consider(st.drainPollAt)
 		}
 	}
 	a.mu.Unlock()
@@ -671,7 +688,7 @@ func (a *Agent) onDeath(id string) {
 		}
 		reason := ""
 		switch {
-		case st.soaking:
+		case st.soaking || st.draining:
 			reason = fmt.Sprintf("%s exited (%s) %v after cutover, inside the soak window", id, exit, ran.Round(time.Millisecond))
 		default:
 			st.newCrashes++
@@ -1749,7 +1766,7 @@ func (a *Agent) Reconfigure(desired Service) {
 	}
 	if st.rolling {
 		switch {
-		case st.soaking:
+		case st.soaking || st.draining:
 			// The new generation is serving but unproven; the next spec waits
 			// for the soak to settle rather than tearing down what serves now.
 			pending := desired
@@ -1775,6 +1792,9 @@ func (a *Agent) Reconfigure(desired Service) {
 			st.newIDs = nil
 			st.soaking = false
 			st.soakAt = time.Time{}
+			st.draining = false
+			st.drainAt = time.Time{}
+			st.drainPollAt = time.Time{}
 			st.newCrashes = 0
 			st.rolloutGen++
 			st.rolloutID = newRolloutID(desired.Name, st.rolloutGen)
@@ -2064,6 +2084,10 @@ func (a *Agent) beginRolloutLocked(st *serviceState, newSpec Service) {
 	st.stoppedOld = false
 	st.soaking = false
 	st.soakAt = time.Time{}
+	st.draining = false
+	st.drainAt = time.Time{}
+	st.drainPollAt = time.Time{}
+	st.drainNote = ""
 	st.newCrashes = 0
 	st.rejected = nil
 	st.rolloutID = newRolloutID(newSpec.Name, st.rolloutGen)
@@ -2165,12 +2189,20 @@ func (a *Agent) advanceRollout(ctx context.Context, svcName string) {
 	}
 	if st.soaking {
 		if time.Now().After(st.soakAt) {
-			a.completeRolloutLocked(st)
+			a.beginDrainLocked(st)
 			a.mu.Unlock()
 			a.wake()
 			return
 		}
 		a.mu.Unlock()
+		return
+	}
+	if st.draining {
+		if time.Now().After(st.drainPollAt) {
+			a.advanceDrainLocked(st)
+		}
+		a.mu.Unlock()
+		a.wake()
 		return
 	}
 
@@ -2315,6 +2347,22 @@ func (a *Agent) serviceStateLocked(name string) State {
 // point of a start-first rollout is that AllReady/the proxy keep reporting the
 // OLD generation until the new one is confirmed Ready, so a caller never
 // observes a window where nothing is live.
+// procNetConns counts the connections established to inst from its own
+// network namespace. ok is false when the instance has no known address yet
+// or the table cannot be read, in which case the drain does not wait on it.
+func (a *Agent) procNetConns(inst *instance) (int, bool) {
+	ip, port, ok := a.ipPort.IPPort(inst.id)
+	if !ok {
+		return 0, false
+	}
+	n, err := establishedConns(inst.pid, ip, port)
+	if err != nil {
+		a.logger.Printf("instance %q: cannot read its connection table: %v", inst.id, err)
+		return 0, false
+	}
+	return n, true
+}
+
 func (a *Agent) liveInstancesLocked(name string) []*instance {
 	st := a.services[name]
 	if st == nil {
@@ -2322,7 +2370,7 @@ func (a *Agent) liveInstancesLocked(name string) []*instance {
 	}
 	var ids []string
 	switch {
-	case st.soaking:
+	case st.soaking || st.draining:
 		ids = st.newIDs
 	case st.rolling:
 		ids = st.oldIDs

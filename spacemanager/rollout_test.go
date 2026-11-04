@@ -20,7 +20,7 @@ func lastRollout(a *Agent, name string) (RolloutRecord, bool) {
 	rs := a.Rollouts(name)
 	for i := len(rs) - 1; i >= 0; i-- {
 		switch rs[i].Result {
-		case RolloutRolling, RolloutSoaking:
+		case RolloutRolling, RolloutSoaking, RolloutDraining:
 			continue
 		}
 		return rs[i], true
