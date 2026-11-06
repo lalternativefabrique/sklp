@@ -743,6 +743,7 @@ func runSandboxed(ctx context.Context, spec sandboxSpec) (int, error) {
 		// (Linux/Landlock); composes with the netns unshare above. On
 		// macOS / Landlock-less kernels it degrades to a logged no-op.
 		applyFilesystemIsolation(c, spec, workdir)
+		wrapInStepSlice(c)
 		return c
 	}
 

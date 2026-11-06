@@ -24,6 +24,9 @@ func cpuBudget() int {
 	if n := cgroupCPUs(); n > 0 {
 		return n
 	}
+	if n := stepSliceBudget(); n > 0 {
+		return n
+	}
 	return runtime.NumCPU()
 }
 
