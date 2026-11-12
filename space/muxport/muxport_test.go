@@ -11,3 +11,16 @@ func TestForIsStableAndInRange(t *testing.T) {
 		t.Fatalf("For = %d", p)
 	}
 }
+
+func TestFollowingCoversTheGuestWalk(t *testing.T) {
+	base := For("sklp-dev-5159c4a7691f")
+	got := Following("sklp-dev-5159c4a7691f")
+	if len(got) != Spare {
+		t.Fatalf("got %d ports, want %d", len(got), Spare)
+	}
+	for i, p := range got {
+		if p != base+i+1 {
+			t.Fatalf("Following[%d] = %d, want %d", i, p, base+i+1)
+		}
+	}
+}
