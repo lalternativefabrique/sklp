@@ -9,10 +9,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
 	"github.com/lalternativefabrique/sklp/internal/stackconfig"
+	"github.com/lalternativefabrique/sklp/pipeline/reporter"
 	"github.com/lalternativefabrique/sklp/space/host"
 )
 
@@ -224,7 +228,7 @@ func runViaSpace(ctx context.Context, cfg Config) (string, error) {
 	// runner needs explicitly: cfg.Env (carries SKLP_RUNNER_MODE=embedded-oci so
 	// it skips local service boot) and the writable-cache redirects. Same set as
 	// the parked init's Env (runnerEnv).
-	execEnv := runnerEnv
+	execEnv := append(append([]string{}, runnerEnv...), relayedTerminalEnv(cfg.LiveOut)...)
 
 	runcBin, runcRoot, id := space.ExecCoords(runnerName)
 	var report strings.Builder
@@ -376,4 +380,25 @@ func liveOutFile(w io.Writer) (*os.File, func()) {
 		pw.Close()
 		<-done
 	}
+}
+
+func relayedTerminalEnv(live io.Writer) []string {
+	if !reporter.IsTerminal(live) {
+		return nil
+	}
+	env := []string{reporter.RelayedTTYEnv + "=1"}
+	cols, rows := 0, 0
+	if f, ok := live.(*os.File); ok {
+		cols, rows, _ = term.GetSize(int(f.Fd()))
+	}
+	if cols <= 0 {
+		cols, _ = strconv.Atoi(os.Getenv("COLUMNS"))
+	}
+	if rows <= 0 {
+		rows, _ = strconv.Atoi(os.Getenv("LINES"))
+	}
+	if cols > 0 && rows > 0 {
+		env = append(env, "COLUMNS="+strconv.Itoa(cols), "LINES="+strconv.Itoa(rows))
+	}
+	return env
 }
