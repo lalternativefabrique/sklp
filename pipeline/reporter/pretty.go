@@ -725,6 +725,10 @@ func (r *PrettyReporter) currentWidth() int {
 			return cols
 		}
 	}
+	if cols, _ := relayedSize(); cols > 0 {
+		r.termWidth = cols
+		return cols
+	}
 	return maxLineWidth
 }
 
@@ -743,6 +747,10 @@ func (r *PrettyReporter) currentHeight() int {
 			}
 			return rows
 		}
+	}
+	if _, rows := relayedSize(); rows > 0 {
+		r.termHeight = rows
+		return rows
 	}
 	return 0
 }

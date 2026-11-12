@@ -161,8 +161,7 @@ type Options struct {
 
 // New returns the best reporter for w. Detection rules:
 //   - opts.ForcePlain               → PlainReporter
-//   - w is not a *os.File           → PlainReporter (pipes, buffers)
-//   - !isTerminal(file.Fd())        → PlainReporter
+//   - !IsTerminal(w)                → PlainReporter (pipes, buffers)
 //   - $NO_COLOR set (any value)     → PlainReporter
 //   - otherwise                     → PrettyReporter
 //
@@ -176,11 +175,7 @@ func New(w io.Writer, opts Options) Reporter {
 	if os.Getenv("NO_COLOR") != "" {
 		return &PlainReporter{W: w}
 	}
-	f, ok := w.(*os.File)
-	if !ok {
-		return &PlainReporter{W: w}
-	}
-	if !isTerminal(f) {
+	if !IsTerminal(w) {
 		return &PlainReporter{W: w}
 	}
 	r := &PrettyReporter{W: w}

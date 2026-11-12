@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+
+	"github.com/lalternativefabrique/sklp/pipeline/reporter"
 )
 
 // Sentinel markers wrap the final JSON report when it is also mirrored
@@ -38,7 +40,7 @@ func emitJSONReport(stdout, stderr io.Writer, jsonBytes []byte) {
 			_, _ = stdout.Write([]byte("\n"))
 		}
 	}
-	if stderr != nil {
+	if stderr != nil && !reporter.IsTerminal(stderr) {
 		fmt.Fprintln(stderr, ReportSentinelBegin)
 		_, _ = stderr.Write(jsonBytes)
 		if !bytes.HasSuffix(jsonBytes, []byte("\n")) {
