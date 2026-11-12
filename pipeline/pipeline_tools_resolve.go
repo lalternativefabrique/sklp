@@ -551,10 +551,18 @@ func autoInstallCommand(name string) (string, bool) {
 		// caller's checkout — and a half-applied sync (go.mod bumped,
 		// go.sum entry missing) breaks the build it was meant to speed
 		// up. `go list -m` reads the same member list without writing.
-		return "for d in $(go list -m -f '{{.Dir}}' 2>/dev/null); do (cd \"$d\" && go mod download -x); done; go mod download -x", true
+		// go.work.sum is still written by any download in workspace mode,
+		// so it is put back as it was once the cache is warm.
+		return goWorkSumKept("for d in $(go list -m -f '{{.Dir}}' 2>/dev/null); do (cd \"$d\" && go mod download -x); done; go mod download -x"), true
 	default:
 		return "", false
 	}
+}
+
+func goWorkSumKept(cmd string) string {
+	return `_sum="$(mktemp)"; if [ -f go.work.sum ]; then cp go.work.sum "$_sum"; _had=1; else _had=0; fi; (` +
+		cmd +
+		`); _rc=$?; if [ "$_had" = 1 ]; then cp "$_sum" go.work.sum; else rm -f go.work.sum; fi; rm -f "$_sum"; exit $_rc`
 }
 
 // hasManifest reports whether the manifest a tool's install command
