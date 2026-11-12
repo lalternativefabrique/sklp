@@ -22,3 +22,19 @@ func For(scope string) int {
 	}
 	return Base + int(acc%Span)
 }
+
+// Spare is how many ports past For the Mac publishes in addition to it: the
+// guest walks +1 from For when that port is taken, and the Mac must already be
+// listening on whichever port the guest ends up printing.
+const Spare = 3
+
+// Following lists the ports right after For(scope) that a collision in the guest
+// can move the mux onto.
+func Following(scope string) []int {
+	base := For(scope)
+	out := make([]int, 0, Spare)
+	for i := 1; i <= Spare; i++ {
+		out = append(out, base+i)
+	}
+	return out
+}

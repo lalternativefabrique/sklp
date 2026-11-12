@@ -12,7 +12,7 @@ import (
 // embedded runtime is unavailable instead.
 func relayDevLima(cfg DevConfig, spaceName string) error {
 	ports := append(declaredPorts(cfg.TaskPath), muxport.For(spaceName))
-	release := limarelay.ForwardHostPorts(ports)
+	release := limarelay.ForwardHostPorts(ports, muxport.Following(spaceName))
 	defer release()
 	return limarelay.RelaySelf(cfg.Repo)
 }
