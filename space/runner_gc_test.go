@@ -294,3 +294,22 @@ func TestScanRunnerEntries_WalksEntriesWithoutRecordedSize(t *testing.T) {
 		t.Errorf("Size = %d, want the measured tree (>= 4096); a legacy entry must not weigh 0", entries[0].Size)
 	}
 }
+
+func TestCollectRunner_KeepsTheRunsOwnEntryWhenPinnedEntriesFillTheBudget(t *testing.T) {
+	root := t.TempDir()
+	for _, h := range []string{"devspace1", "devspace2"} {
+		dir := mkRunnerEntry(t, root, h, 4096, true, time.Now().Add(-time.Hour))
+		if err := os.WriteFile(filepath.Join(dir, ".lock"), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mkRunnerEntry(t, root, "current", 4096, true, time.Now())
+
+	res, err := collectRunnerIn(root, RunnerGCOpts{MaxBytes: 10000, Keep: []string{"current"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removedHashes(res)["current"] {
+		t.Fatal("evicted the rootfs the finishing run just used; the next run rebuilds it from scratch")
+	}
+}

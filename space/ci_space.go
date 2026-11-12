@@ -58,11 +58,12 @@ func runViaSpace(ctx context.Context, cfg Config) (string, error) {
 	// exactly like a passing one. Reclaim failures are not the pipeline's
 	// verdict, so they never alter the result.
 	defer collectToolcacheAfterRun(cfg.LiveOut)
-	// Declared BEFORE the rootfs unlock below so LIFO runs it AFTER: a collector
-	// that sees this run's own pin still held would skip the very entry the
-	// budget most needs counted, and the LRU pass would evict an older one
-	// instead.
-	defer collectRunnerAfterRun(cfg.LiveOut)
+	// Declared BEFORE the rootfs unlock below so LIFO runs it AFTER the pin is
+	// released; runnerHash keeps this run's own rootfs out of the eviction set
+	// while still counting it, or an older pinned set (dev spaces mount theirs)
+	// leaves it as the only candidate and every run rebuilds from scratch.
+	var runnerHash string
+	defer func() { collectRunnerAfterRun(cfg.LiveOut, runnerHash) }()
 
 	// The runner rootfs is BUILT on the fly from .sklp/space.yaml (base + apt +
 	// toolchain + skt + the current sklp), cached by recipe hash — never a pulled
@@ -73,6 +74,9 @@ func runViaSpace(ctx context.Context, cfg Config) (string, error) {
 	buildOut, closeBuildOut := liveOutFile(cfg.LiveOut)
 	runnerRootfs, bakedEnv, _, unlockRootfs, err := buildSpaceRootfs(ctx, space, cfg.RepoPath, "", buildOut)
 	closeBuildOut()
+	if err == nil {
+		runnerHash = filepath.Base(filepath.Dir(runnerRootfs))
+	}
 	// Held until every container mounting this rootfs is torn down, so a
 	// concurrent `sklp cache gc` cannot unlink it mid-run.
 	defer unlockRootfs()

@@ -70,6 +70,9 @@ type RunnerGCOpts struct {
 	MaxBytes int64
 	// DryRun reports what would be removed without unlinking anything.
 	DryRun bool
+	// Keep names entries never evicted, though still counted against the
+	// budget: the rootfs the finishing run used is the one the next run hits.
+	Keep []string
 }
 
 // RunnerGCResult reports a collection pass.
@@ -158,8 +161,12 @@ func collectRunnerIn(root string, opts RunnerGCOpts) (RunnerGCResult, error) {
 	}
 
 	var survivors []RunnerEntry
+	keep := map[string]bool{}
+	for _, h := range opts.Keep {
+		keep[h] = true
+	}
 	for _, r := range entries {
-		if r.Live {
+		if r.Live || (keep[r.Hash] && r.Built) {
 			res.SkippedLive = append(res.SkippedLive, r)
 			continue
 		}
@@ -216,8 +223,8 @@ func collectRunnerIn(root string, opts RunnerGCOpts) (RunnerGCResult, error) {
 // reports only when it freed something, so a normal run stays silent. Errors
 // are advisory: an entry the collector cannot unlink must never turn a green
 // pipeline red.
-func collectRunnerAfterRun(out io.Writer) {
-	res, err := CollectRunner(RunnerGCOpts{Partial: true, MaxBytes: runnerBudget()})
+func collectRunnerAfterRun(out io.Writer, keep ...string) {
+	res, err := CollectRunner(RunnerGCOpts{Partial: true, MaxBytes: runnerBudget(), Keep: keep})
 	if err != nil || out == nil || len(res.Removed) == 0 {
 		return
 	}
