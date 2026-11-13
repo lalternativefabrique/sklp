@@ -1,4 +1,4 @@
-// secret.go implements `sklp secret {push,pull,list,delete}`. It syncs
+// secret.go implements `sklp secret {push,pull,list,delete,history,restore}`. It syncs
 // project_secret entries in core with a local dotenv file, so a developer
 // can populate/refresh project secrets from the terminal instead of the
 // web UI, and bootstrap a fresh clone's secrets file from what's stored.
@@ -48,12 +48,14 @@ func secretCommand() cli.Command {
 	filePos := []cli.Positional{{Name: "file"}}
 	return cli.Command{
 		Name:  "secret",
-		Short: "Sync project secrets between core and a local dotenv file (push | pull | list | delete)",
+		Short: "Sync project secrets between core and a local dotenv file (push | pull | list | delete | history | restore)",
 		Sub: []cli.Command{
 			{Name: "push", Short: "Upload dotenv KEY=VALUE pairs to core", Flags: secretPushFlags(), Positionals: filePos, Run: run(secretPush)},
 			{Name: "pull", Short: "Fetch deploy-readable secrets into a local dotenv file", Flags: secretPullFlags(), Positionals: filePos, Run: run(secretPull)},
 			{Name: "list", Short: "List project secrets (name, last4, deploy-readable — never plaintext)", Flags: secretListFlags(), Run: run(secretList)},
 			{Name: "delete", Short: "Delete a project secret by name", Flags: []cli.Flag{issueProjectFlag}, Positionals: []cli.Positional{{Name: "name", Required: true}}, Run: run(secretDelete)},
+			{Name: "history", Short: "List archived values (replaced or deleted) of one secret or of the whole project", Flags: []cli.Flag{issueProjectFlag, issueJSONFlag}, Positionals: []cli.Positional{{Name: "name"}}, Run: run(secretHistory)},
+			{Name: "restore", Short: "Put an archived value back under its name (the current value is archived in turn)", Flags: []cli.Flag{issueProjectFlag}, Positionals: []cli.Positional{{Name: "version-id", Required: true}}, Run: run(secretRestore)},
 		},
 	}
 }
@@ -310,6 +312,75 @@ func secretDelete(iio *issueIO, args cli.Args) error {
 		return wrapAPIError(err, status)
 	}
 	fmt.Fprintf(iio.Stdout, "deleted secret %s\n", name)
+	return nil
+}
+
+type secretVersionItem struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	ValueLast4     string `json:"value_last4"`
+	DeployReadable bool   `json:"deploy_readable"`
+	ValidFrom      string `json:"valid_from"`
+	ArchivedAt     string `json:"archived_at"`
+	Reason         string `json:"reason"`
+}
+
+func secretHistory(iio *issueIO, args cli.Args) error {
+	project := pickProject(args.String("project"))
+	if project == "" {
+		return errors.New("specify --project or set SKLP_PROJECT")
+	}
+	apic, err := resolveClient()
+	if err != nil {
+		return err
+	}
+	path := "/api/projects/" + url.PathEscape(project) + "/secrets/versions"
+	if name := firstArg(args, 0); name != "" {
+		path += "?name=" + url.QueryEscape(name)
+	}
+	body, status, err := apic.Get(context.Background(), path)
+	if err != nil {
+		return wrapAPIError(err, status)
+	}
+	if args.Bool("json") {
+		_, err := iio.Stdout.Write(append(body, '\n'))
+		return err
+	}
+	var items []secretVersionItem
+	if err := json.Unmarshal(body, &items); err != nil {
+		return fmt.Errorf("parse response: %w", err)
+	}
+	tw := tabwriter.NewWriter(iio.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "VERSION\tNAME\tLAST4\tREASON\tARCHIVED\tSET")
+	for _, v := range items {
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\n", v.ID, v.Name, emptyDash(v.ValueLast4), v.Reason, v.ArchivedAt, v.ValidFrom)
+	}
+	return tw.Flush()
+}
+
+func secretRestore(iio *issueIO, args cli.Args) error {
+	versionID := firstArg(args, 0)
+	if versionID == "" {
+		return errors.New("usage: sklp secret restore <version-id> [flags]")
+	}
+	project := pickProject(args.String("project"))
+	if project == "" {
+		return errors.New("specify --project or set SKLP_PROJECT")
+	}
+	apic, err := resolveClient()
+	if err != nil {
+		return err
+	}
+	path := "/api/projects/" + url.PathEscape(project) + "/secrets/versions/" + url.PathEscape(versionID) + "/restore"
+	body, status, err := apic.Post(context.Background(), path, nil)
+	if err != nil {
+		return wrapAPIError(err, status)
+	}
+	var sec secretItem
+	if err := json.Unmarshal(body, &sec); err != nil {
+		return fmt.Errorf("parse response: %w", err)
+	}
+	fmt.Fprintf(iio.Stdout, "restored %s (…%s)\n", sec.Name, sec.ValueLast4)
 	return nil
 }
 
