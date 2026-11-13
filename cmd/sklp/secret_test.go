@@ -330,3 +330,54 @@ func TestSecretCommand_RegisteredUnderRoot(t *testing.T) {
 	}
 	t.Fatal("secret command not registered under rootCommand()")
 }
+
+func TestSecretHistory_FiltersByNameAndShowsLast4(t *testing.T) {
+	var gotName string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/projects/proj1/secrets/versions" {
+			http.NotFound(w, r)
+			return
+		}
+		gotName = r.URL.Query().Get("name")
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			{"id": 42, "name": "MY_TOKEN", "value_last4": "abcd", "reason": "update", "archived_at": "2026-11-12T10:00:00Z"},
+		})
+	}))
+	defer srv.Close()
+	writeAPIConfig(t, srv.URL)
+
+	out := &bytes.Buffer{}
+	if err := secretHistory(&issueIO{Stdout: out, Stderr: io.Discard}, secretArgs(t, "history", "--project", "proj1", "MY_TOKEN")); err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if gotName != "MY_TOKEN" {
+		t.Fatalf("name filter not sent, got %q", gotName)
+	}
+	for _, want := range []string{"42", "MY_TOKEN", "abcd", "update"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestSecretRestore_PostsVersion(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/projects/proj1/secrets/versions/42/restore" {
+			http.NotFound(w, r)
+			return
+		}
+		hit = true
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "sec-1", "name": "MY_TOKEN", "value_last4": "abcd"})
+	}))
+	defer srv.Close()
+	writeAPIConfig(t, srv.URL)
+
+	out := &bytes.Buffer{}
+	if err := secretRestore(&issueIO{Stdout: out, Stderr: io.Discard}, secretArgs(t, "restore", "--project", "proj1", "42")); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if !hit || !strings.Contains(out.String(), "restored MY_TOKEN") {
+		t.Fatalf("restore not performed, out=%q", out.String())
+	}
+}
