@@ -188,8 +188,7 @@ const peekTimeout = 10 * time.Second
 // missing Host / unknown host / splice error closes the connection.
 func (m *hostMux) handle(conn net.Conn) {
 	_ = conn.SetReadDeadline(time.Now().Add(peekTimeout))
-	br := bufio.NewReader(conn)
-	host, buffered, err := peekHostHeader(br)
+	host, buffered, err := peekHostHeader(conn)
 	_ = conn.SetReadDeadline(time.Time{})
 	if err != nil {
 		_ = conn.Close()
@@ -227,13 +226,13 @@ func (m *hostMux) close() {
 }
 
 // peekHostHeader reads just enough of the request to learn the Host header,
-// returning the header value and ALL bytes consumed from br so the caller can
+// returning the header value and ALL bytes consumed from src so the caller can
 // replay them to the backend (the request must reach the service intact). It
 // reuses net/http's request parser to stay spec-correct (folded headers, the
 // absolute-form request target, etc.).
-func peekHostHeader(br *bufio.Reader) (host string, buffered []byte, err error) {
+func peekHostHeader(src io.Reader) (host string, buffered []byte, err error) {
 	var cap bytes.Buffer
-	tee := bufio.NewReader(io.TeeReader(br, &cap))
+	tee := bufio.NewReader(io.TeeReader(src, &cap))
 	req, err := http.ReadRequest(tee)
 	if err != nil {
 		return "", nil, err
