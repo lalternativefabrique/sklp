@@ -110,14 +110,8 @@ func (h *hostIngress) OpenService(serviceName string, mappings []PortMapping) {
 		}
 		ln, err := net.Listen("tcp", addr)
 		if err != nil {
-			// Best-effort: a taken/privileged port must not kill the deploy. Host
-			// ports are necessarily global (two processes can't bind one port), so
-			// a fixed host port already taken by ANOTHER SPACE lands here — the
-			// service stays reachable east-west by DNS, just not on this host port.
-			// Surface the likely cause so it isn't mistaken for a system-port clash.
-			fmt.Fprintf(os.Stderr, "[sklp deploy] ingress: host port %d is already in use (another space, "+
-				"or a system process?) — %q stays reachable in-space by name, but not on %s (%v)\n",
-				m.HostPort, serviceName, addr, err)
+			fmt.Fprintf(os.Stderr, "[sklp] ingress: bind failed: %s unavailable (held by another space or process) — %q is not published there (%v)\n",
+				addr, serviceName, err)
 			continue
 		}
 		h.listeners[serviceName] = append(h.listeners[serviceName], ln)
@@ -132,8 +126,8 @@ func (h *hostIngress) OpenService(serviceName string, mappings []PortMapping) {
 func (h *hostIngress) openUDP(serviceName string, m PortMapping, addr string) {
 	pc, err := net.ListenPacket("udp", addr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "[sklp deploy] ingress: udp port %d is already in use — %q is not reachable on %s/udp (%v)\n",
-			m.HostPort, serviceName, addr, err)
+		fmt.Fprintf(os.Stderr, "[sklp] ingress: bind failed: %s/udp unavailable (held by another space or process) — %q is not published there (%v)\n",
+			addr, serviceName, err)
 		return
 	}
 	if err := h.cnet.sendPacketConn(serviceName, m.ContainerPort, pc.(*net.UDPConn)); err != nil {
