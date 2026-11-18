@@ -306,15 +306,14 @@ func (b *embeddedBackend) WaitReady(ctx context.Context, name string, ready *pip
 //   - HTTP mux: <name>.<scope>.localhost:<muxPort> — HTTP-only, dispatched by
 //     Host header. No-op when the mux is unavailable.
 //   - TCP bind: 127.0.0.1:<containerPort> → container, for raw-TCP services
-//     (postgres, nats, …). Reachable as <name>.<scope>.localhost:<port> or
-//     simply localhost:<port>. A bind failure (port taken) is logged and skipped.
+//     (postgres, nats, …). OpenIngress prints the bound address, or the bind
+//     failure when another space or process holds the port.
 func (b *embeddedBackend) RegisterHost(scope, name string, containerPort int) {
 	if containerPort == 0 {
 		return
 	}
 	host := devHostname(scope, name)
 
-	// HTTP mux — dispatch by hostname, HTTP only.
 	if b.mux != nil {
 		b.mux.RegisterHost(host, b.l, name, containerPort)
 		b.mu.Lock()
@@ -323,9 +322,7 @@ func (b *embeddedBackend) RegisterHost(scope, name string, containerPort int) {
 		fmt.Printf("↥ %s → http://%s:%d\n", name, host, b.mux.BoundPort())
 	}
 
-	// TCP bind — one listener per service port, protocol-agnostic.
 	b.l.OpenIngress(name, []space.PortMapping{{HostPort: containerPort, ContainerPort: containerPort}})
-	fmt.Printf("↥ %s → %s:%d\n", name, host, containerPort)
 }
 
 // Watch polls the container's runc state and closes the returned channel when

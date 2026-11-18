@@ -25,7 +25,7 @@ func ForwardHostPorts(ports []int) (release func()) {
 	for _, port := range ports {
 		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[sklp] macos: 127.0.0.1:%d is already taken on the Mac; the stack's port %d is not published there\n", port, port)
+			fmt.Fprintf(os.Stderr, "[sklp] macos: bind failed: 127.0.0.1:%d unavailable on the Mac (held by another stack or process) — port %d is not published there (%v)\n", port, port, err)
 			continue
 		}
 		listeners = append(listeners, ln)
