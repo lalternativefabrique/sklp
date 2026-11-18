@@ -1,9 +1,11 @@
 package space
 
 import (
-	"bufio"
+	"bytes"
 	"github.com/lalternativefabrique/sklp/space/muxport"
+	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -56,8 +58,7 @@ func TestHostMux_PeekHostHeader(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			br := bufio.NewReader(strings.NewReader(tc.raw))
-			host, buffered, err := peekHostHeader(br)
+			host, buffered, err := peekHostHeader(strings.NewReader(tc.raw))
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("want error, got host=%q", host)
@@ -219,5 +220,45 @@ func TestHostMux_FirstMissDedup(t *testing.T) {
 	m.register("core.x.localhost", route{})
 	if !m.firstMiss("core.x.localhost") {
 		t.Fatal("miss after a register must warn again")
+	}
+}
+
+type drainingRouter struct {
+	got chan []byte
+}
+
+func (d *drainingRouter) SendConnReplay(_ string, _ int, client net.Conn, prefix []byte) error {
+	go func() {
+		rest, _ := io.ReadAll(client)
+		d.got <- append(append([]byte(nil), prefix...), rest...)
+	}()
+	return nil
+}
+
+func TestHostMux_HandleReplaysEveryByteOfASplitRequest(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), 215*1024)
+	head := "POST /upload HTTP/1.1\r\nHost: web.abc.localhost:8665\r\nCookie: " +
+		strings.Repeat("c", 3000) + "\r\nContent-Length: " + strconv.Itoa(len(body)) + "\r\n\r\n"
+	sent := append([]byte(head), body...)
+
+	m := newHostMux(0)
+	r := &drainingRouter{got: make(chan []byte, 1)}
+	m.register("web.abc.localhost", route{router: r, service: "web", port: 5273})
+
+	client, server := net.Pipe()
+	go m.handle(server)
+	go func() {
+		_, _ = client.Write(sent[:2000])
+		_, _ = client.Write(sent[2000:])
+		_ = client.Close()
+	}()
+
+	select {
+	case got := <-r.got:
+		if !bytes.Equal(got, sent) {
+			t.Fatalf("backend received %d bytes, client sent %d", len(got), len(sent))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("request never reached the backend")
 	}
 }
