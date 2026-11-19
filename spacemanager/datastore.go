@@ -31,12 +31,13 @@ const (
 )
 
 type DataStore struct {
-	Service    string     `json:"service"`
-	Engine     DataEngine `json:"engine"`
-	Image      string     `json:"image"`
-	Volumes    []string   `json:"volumes"`
-	Protection Protection `json:"protection"`
-	Detail     string     `json:"detail"`
+	Service    string         `json:"service"`
+	Engine     DataEngine     `json:"engine"`
+	Image      string         `json:"image"`
+	Volumes    []string       `json:"volumes"`
+	Protection Protection     `json:"protection"`
+	Detail     string         `json:"detail"`
+	LastBackup *BackupOutcome `json:"last_backup,omitempty"`
 }
 
 // engineMarkers are matched against the image's repository name, most

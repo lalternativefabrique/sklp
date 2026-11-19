@@ -272,7 +272,13 @@ func newMuxWithDelete(space string, sup Supervisor, shutdown, purgeShutdown, del
 			http.Error(w, "datastores: GET required", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, DataStoresResponse{Space: space, Stores: spacemanager.DataStores(desiredServices(sup))})
+		stores := spacemanager.DataStores(desiredServices(sup))
+		if b, ok := sup.(interface {
+			LastBackups() map[string]spacemanager.BackupOutcome
+		}); ok {
+			stores = spacemanager.WithLastBackups(stores, b.LastBackups())
+		}
+		writeJSON(w, DataStoresResponse{Space: space, Stores: stores})
 	})
 
 	mux.HandleFunc(RouteSpaces, func(w http.ResponseWriter, r *http.Request) {

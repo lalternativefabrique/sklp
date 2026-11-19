@@ -257,6 +257,7 @@ type Options struct {
 // zero-downtime on a spec change. One Agent owns one set of services for the
 // lifetime of Run.
 type Agent struct {
+	backups     backupLog
 	launcher    Launcher
 	watcher     DeathWatcher
 	wakeCh      chan struct{} // internal wake signal for eventLoop

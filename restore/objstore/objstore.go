@@ -1,7 +1,9 @@
 package objstore
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 type Object struct {
@@ -81,6 +84,61 @@ func (s *S3) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("get s3://%s/%s: %w", s.bucket, key, err)
 	}
 	return obj.Body, nil
+}
+
+// PartSize bounds what an upload holds in memory: one part at a time.
+const PartSize = 16 << 20
+
+var ErrEmpty = errors.New("nothing to upload")
+
+// Put streams r to key as a multipart upload. A read error or an empty stream
+// aborts it, so a failed producer never leaves an object behind.
+func (s *S3) Put(ctx context.Context, key string, r io.Reader) (int64, error) {
+	loc := fmt.Sprintf("s3://%s/%s", s.bucket, key)
+	up, err := s.client.CreateMultipartUpload(ctx, &s3.CreateMultipartUploadInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return 0, fmt.Errorf("start upload %s: %w", loc, err)
+	}
+	var total int64
+	abort := func(cause error) (int64, error) {
+		_, _ = s.client.AbortMultipartUpload(context.WithoutCancel(ctx), &s3.AbortMultipartUploadInput{
+			Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: up.UploadId,
+		})
+		return total, cause
+	}
+	var parts []types.CompletedPart
+	buf := make([]byte, PartSize)
+	for n := int32(1); ; n++ {
+		m, rerr := io.ReadFull(r, buf)
+		last := rerr == io.EOF || rerr == io.ErrUnexpectedEOF
+		if rerr != nil && !last {
+			return abort(rerr)
+		}
+		if m > 0 {
+			out, err := s.client.UploadPart(ctx, &s3.UploadPartInput{
+				Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: up.UploadId,
+				PartNumber: aws.Int32(n), Body: bytes.NewReader(buf[:m]),
+			})
+			if err != nil {
+				return abort(fmt.Errorf("upload part %d of %s: %w", n, loc, err))
+			}
+			parts = append(parts, types.CompletedPart{ETag: out.ETag, PartNumber: aws.Int32(n)})
+			total += int64(m)
+		}
+		if last {
+			break
+		}
+	}
+	if total == 0 {
+		return abort(ErrEmpty)
+	}
+	if _, err := s.client.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(key), UploadId: up.UploadId,
+		MultipartUpload: &types.CompletedMultipartUpload{Parts: parts},
+	}); err != nil {
+		return abort(fmt.Errorf("complete upload %s: %w", loc, err))
+	}
+	return total, nil
 }
 
 // Dir serves a local directory as a store; prefixes behave like S3's
