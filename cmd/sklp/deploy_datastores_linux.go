@@ -87,15 +87,37 @@ func nodeSpaces(ctx context.Context, nf *netFlags) ([]string, error) {
 func renderDataStores(out *os.File, rows []control.DataStoresResponse) {
 	counts := map[spacemanager.Protection]int{}
 	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "SPACE\tSERVICE\tENGINE\tPROTECTION\tDETAIL")
+	fmt.Fprintln(w, "SPACE\tSERVICE\tENGINE\tPROTECTION\tLAST BACKUP\tDETAIL")
+	failed := 0
 	for _, r := range rows {
 		for _, s := range r.Stores {
 			counts[s.Protection]++
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.Space, s.Service, s.Engine, strings.ToUpper(string(s.Protection)), s.Detail)
+			if s.LastBackup != nil && !s.LastBackup.OK {
+				failed++
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.Space, s.Service, s.Engine, strings.ToUpper(string(s.Protection)), lastBackupCell(s.LastBackup), s.Detail)
 		}
 	}
 	w.Flush()
 	fmt.Fprintf(out, "\n%d backed · %d opaque · %d unprotected · %d disposable\n",
 		counts[spacemanager.ProtectionBacked], counts[spacemanager.ProtectionOpaque],
 		counts[spacemanager.ProtectionNone], counts[spacemanager.ProtectionDisposable])
+	if failed > 0 {
+		fmt.Fprintf(out, "%d store(s) whose last backup FAILED\n", failed)
+	}
+}
+
+func lastBackupCell(o *spacemanager.BackupOutcome) string {
+	switch {
+	case o == nil:
+		return "-"
+	case !o.OK:
+		return "FAILED " + o.At.Format("01-02 15:04") + ": " + o.Error
+	case o.Warning != "":
+		return "SUSPECT " + o.At.Format("01-02 15:04") + ": " + o.Warning
+	case o.Bytes > 0:
+		return fmt.Sprintf("ok %s %s", o.At.Format("01-02 15:04"), humanBytes(o.Bytes))
+	default:
+		return "ok " + o.At.Format("01-02 15:04")
+	}
 }

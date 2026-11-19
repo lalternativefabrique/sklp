@@ -2,6 +2,7 @@ package spacemanager
 
 import (
 	"context"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -56,7 +57,7 @@ func scheduledJob(name, schedule string) Service {
 	return Service{Name: name, Oneshot: true, Schedule: schedule}
 }
 
-func (f *fakeRunner) runBackup(ctx context.Context, target ExecTarget, cmd []string) (int, error) {
+func (f *fakeRunner) runBackup(ctx context.Context, target ExecTarget, cmd []string, stdout io.Writer) (int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, target.ContainerID)

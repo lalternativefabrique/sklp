@@ -2,9 +2,11 @@ package spacemanager
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
+	"github.com/lalternativefabrique/sklp/restore/objstore"
 	"github.com/lalternativefabrique/sklp/space"
 )
 
@@ -18,9 +20,11 @@ type execTargetResolver interface {
 	TriggerJob(name string) bool
 }
 
-// backupRunner runs cmd inside target and returns its exit code. In production
-// it wraps space.RuncExecStreams; tests inject a fake.
-type backupRunner func(ctx context.Context, target ExecTarget, cmd []string) (int, error)
+type backupRunner func(ctx context.Context, target ExecTarget, cmd []string, stdout io.Writer) (int, error)
+
+type backupRecorder interface {
+	RecordBackup(BackupOutcome)
+}
 
 // backupEntry is one scheduled directive. A service's `backup:` execs command in
 // a live instance; a job's `schedule:` re-runs the job's own container instead,
@@ -30,6 +34,7 @@ type backupEntry struct {
 	command []string
 	expr    string
 	job     bool
+	stream  *streamTarget
 }
 
 // backupScheduler fires per-service backup commands and scheduled jobs on their
@@ -44,12 +49,17 @@ type backupScheduler struct {
 	lastFired map[string]string // dedupeKey -> last fired "YYYY-MM-DDTHH:MM"
 	badExpr   map[string]string // dedupeKey -> schedule already reported invalid
 	log       func(format string, a ...any)
+	openStore func(objstore.S3Config) (archiveStore, error)
+	record    func(BackupOutcome)
 }
 
 // StartBackupScheduler runs the scheduler over the agent's desired set, ticking
 // each minute until ctx is cancelled. logf receives one-line status messages.
 func StartBackupScheduler(ctx context.Context, resolver execTargetResolver, logf func(format string, a ...any)) {
 	sched := newBackupScheduler(resolver, runBackupViaRunc)
+	if rec, ok := resolver.(backupRecorder); ok {
+		sched.record = rec.RecordBackup
+	}
 	if logf != nil {
 		sched.log = logf
 	}
@@ -63,6 +73,8 @@ func newBackupScheduler(resolver execTargetResolver, run backupRunner) *backupSc
 		lastFired: map[string]string{},
 		badExpr:   map[string]string{},
 		log:       func(string, ...any) {},
+		openStore: openS3Store,
+		record:    func(BackupOutcome) {},
 	}
 }
 
@@ -70,11 +82,15 @@ func scheduleEntries(services []Service) []backupEntry {
 	var entries []backupEntry
 	for _, svc := range services {
 		if svc.Backup != nil {
-			entries = append(entries, backupEntry{
+			e := backupEntry{
 				service: svc.Name,
 				command: svc.Backup.Command,
 				expr:    svc.Backup.Schedule,
-			})
+			}
+			if t, ok := streamTargetFor(svc); ok {
+				e.stream = t
+			}
+			entries = append(entries, e)
 		}
 		if svc.Oneshot && svc.Schedule != "" {
 			entries = append(entries, backupEntry{
@@ -120,14 +136,14 @@ func (s *backupScheduler) tick(ctx context.Context, now time.Time) {
 			continue
 		}
 		s.lastFired[e.dedupeKey()] = key
-		s.fire(ctx, e)
+		s.fire(ctx, e, now)
 	}
 }
 
 // fire runs one due entry. A scheduled job is handed back to the agent, which
 // relaunches its container; a backup execs its command inside a live instance.
 // Every failure is logged, not fatal: the next schedule retries.
-func (s *backupScheduler) fire(ctx context.Context, e backupEntry) {
+func (s *backupScheduler) fire(ctx context.Context, e backupEntry, now time.Time) {
 	if e.job {
 		if !s.resolver.TriggerJob(e.service) {
 			s.log("sklp deploy: scheduled job %q skipped — previous run still in flight\n", e.service)
@@ -139,17 +155,36 @@ func (s *backupScheduler) fire(ctx context.Context, e backupEntry) {
 	target, ok := s.resolver.ResolveExecTarget(e.service)
 	if !ok {
 		s.log("sklp deploy: backup %q skipped — no live instance\n", e.service)
+		s.record(BackupOutcome{Service: e.service, At: now.UTC(), Error: "no live instance to run the backup in"})
 		return
 	}
-	code, err := s.run(ctx, target, e.command)
+	if e.stream != nil {
+		out := s.stream(ctx, e, target, now)
+		switch {
+		case !out.OK:
+			s.log("sklp deploy: backup %q FAILED: %s\n", e.service, out.Error)
+		case out.Warning != "":
+			s.log("sklp deploy: backup %q uploaded %s (%d bytes) — WARNING: %s\n", e.service, out.Key, out.Bytes, out.Warning)
+		default:
+			s.log("sklp deploy: backup %q ok → %s (%d bytes)\n", e.service, out.Key, out.Bytes)
+		}
+		s.record(out)
+		return
+	}
+	out := BackupOutcome{Service: e.service, At: now.UTC()}
+	code, err := s.run(ctx, target, e.command, io.Discard)
 	switch {
 	case err != nil:
+		out.Error = "failed to run: " + err.Error()
 		s.log("sklp deploy: backup %q failed to run: %v\n", e.service, err)
 	case code != 0:
+		out.Error = fmt.Sprintf("exited %d", code)
 		s.log("sklp deploy: backup %q exited %d\n", e.service, code)
 	default:
+		out.OK = true
 		s.log("sklp deploy: backup %q ok\n", e.service)
 	}
+	s.record(out)
 }
 
 // Run drives the scheduler until ctx is cancelled, ticking every minute.
@@ -167,9 +202,6 @@ func (s *backupScheduler) Run(ctx context.Context) {
 	}
 }
 
-// runBackupViaRunc is the production backupRunner: it execs the command inside
-// the instance with runc, discarding stdout/stderr (the command writes its dump
-// to a volume itself). This is the same exec path the control socket uses.
-func runBackupViaRunc(ctx context.Context, target ExecTarget, cmd []string) (int, error) {
-	return space.RuncExecStreams(ctx, target.RuncBin, target.RuncRoot, target.ContainerID, cmd, nil, io.Discard, io.Discard)
+func runBackupViaRunc(ctx context.Context, target ExecTarget, cmd []string, stdout io.Writer) (int, error) {
+	return space.RuncExecStreams(ctx, target.RuncBin, target.RuncRoot, target.ContainerID, cmd, nil, stdout, io.Discard)
 }
