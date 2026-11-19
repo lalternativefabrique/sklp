@@ -45,6 +45,7 @@ func rootCommand() cli.Command {
 			authCommand(),
 			registryCommand(),
 			issueCommand(),
+			watchCommand(),
 			projectCommand(),
 			whoamiCommand(),
 			agentsMDCommand(),
