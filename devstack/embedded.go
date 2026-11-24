@@ -40,6 +40,8 @@ type devBackend interface {
 	// its HTTP ready probe). No-op for a service with no HTTP probe (raw-TCP like
 	// postgres stays reachable east-west by DNS only).
 	RegisterHost(scope string, name string, containerPort int)
+	// MuxPort is the stack's host mux port, 0 when the mux is unavailable.
+	MuxPort() int
 	// Watch returns a channel closed when the service container exits. dev uses
 	// it to SURFACE a crash (red) — it never restarts the service (that is
 	// deploy's job). The channel also closes when ctx is cancelled (teardown).

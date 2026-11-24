@@ -80,6 +80,12 @@ func embeddedRun(
 		// NEVER the host shell's env. Leaking the host PATH would override the
 		// image PATH (OCI last-wins) — e.g. postgres would no longer find initdb.
 		env := rewriteLoopbackPorts(composeContainerEnv(envFromFiles, baseEnv, ns.Def.Env), ns.Name, portOwners)
+		env, err = expandMuxURLs(env, scope, backend.MuxPort(), stack.Services)
+		if err != nil {
+			printer.Banner("[%s] %v", ns.Name, err)
+			shutdown(fmt.Sprintf("[%s] env", ns.Name))
+			return 1
+		}
 		spec := devServiceSpec(ns, repoAbs, toolchain, env)
 
 		printer.Banner("[%s] launching (embedded runc)", ns.Name)

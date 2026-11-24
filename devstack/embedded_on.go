@@ -302,6 +302,13 @@ func (b *embeddedBackend) WaitReady(ctx context.Context, name string, ready *pip
 	return space.WaitServiceReady(ctx, name, readyToRuntime(ready, timeout), b.l.ProbeCoords(name))
 }
 
+func (b *embeddedBackend) MuxPort() int {
+	if b.mux == nil {
+		return 0
+	}
+	return b.mux.BoundPort()
+}
+
 // RegisterHost routes <name>.<scope>.localhost on the stack's mux port to the
 // service. It never binds the container port on the host loopback: a fixed host
 // port collides across parallel stacks; raw TCP goes through `sklp dev forward`.

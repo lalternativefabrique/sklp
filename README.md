@@ -45,6 +45,7 @@ you develop in.
 |---|---|
 | `sklp init` | Detects your repo and your AI assistant, writes a baseline `.sklp/` and repo-tailored skills |
 | `sklp dev <stack>` | Supervises the local dev stack from `.sklp/<stack>/dev.yaml`: ordering, readiness, logs, one Ctrl-C to stop |
+| `${mux:<svc>}` in a dev.yaml env value | Expands to `http://<svc>.<scope>.localhost:<muxPort>`, the address the host browser reaches that service at (presigned S3 URLs, OIDC redirects, e-mail links) |
 | `sklp dev forward <stack> <svc>` | Opens one service port (postgres, nats…) on a free `127.0.0.1` port until Ctrl-C; HTTP services are reached at `<svc>.<scope>.localhost` |
 | `sklp run <pipeline>` | Runs `.sklp/pipelines/<name>.yaml` locally in a space, only the steps whose scope the diff touches |
 | `sklp space up <name>` | Builds a closed environment from `.sklp/space.yaml` (base image, toolchains, packages) and drops you in |
