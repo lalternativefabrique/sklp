@@ -33,6 +33,9 @@ func Main(args []string) int {
 	// `sklp dev clean` moved to the single housekeeping verb. Kept as a routed
 	// sub-verb rather than falling through to the launcher, which would read
 	// "clean" as a stack name and fail with a confusing "no such stack".
+	if len(args) > 0 && args[0] == "forward" {
+		return RunForward(args[1:])
+	}
 	if len(args) > 0 && args[0] == "clean" {
 		fmt.Fprintln(os.Stderr, "sklp dev clean has moved: use `sklp clean` (add --deep to also drop idle spaces and their volumes)")
 		return 2

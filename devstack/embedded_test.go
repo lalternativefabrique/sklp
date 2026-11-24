@@ -49,6 +49,8 @@ func (f *fakeBackend) WaitReady(_ context.Context, name string, _ *pipeline.Read
 	f.waited = append(f.waited, name)
 	return f.readyErrFor[name]
 }
+func (f *fakeBackend) MuxPort() int { return 0 }
+
 func (f *fakeBackend) RegisterHost(scope, name string, _ int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

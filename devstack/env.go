@@ -3,10 +3,14 @@ package devstack
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/lalternativefabrique/sklp/pipeline"
 )
 
 // loadEnvFiles parses dotenv files in order and returns a merged map.
@@ -149,4 +153,41 @@ func declaredPortOwners(services []NamedService) map[int]string {
 		}
 	}
 	return owners
+}
+
+var muxRefPattern = regexp.MustCompile(`\$\{mux:([A-Za-z0-9_-]+)\}`)
+
+// expandMuxURLs replaces ${mux:<svc>} with the URL the host browser reaches that
+// service at (http://<svc>.<scope>.localhost:<muxPort>): presigned links, OIDC
+// redirects and e-mail links must name the host-side address, not the in-space one.
+func expandMuxURLs(env []string, scope string, muxPort int, services []NamedService) ([]string, error) {
+	routed := map[string]bool{}
+	for _, ns := range services {
+		var httpField string
+		if ns.Def.Ready != nil {
+			httpField = ns.Def.Ready.HTTP
+		}
+		if _, ok := pipeline.PortFromReadyHTTP(ns.Def.Port, httpField); ok {
+			routed[ns.Name] = true
+		}
+	}
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		var missing error
+		kv = muxRefPattern.ReplaceAllStringFunc(kv, func(ref string) string {
+			svc := muxRefPattern.FindStringSubmatch(ref)[1]
+			switch {
+			case !routed[svc]:
+				missing = fmt.Errorf("%s: service %q has no `port:`, so the mux does not route it", ref, svc)
+			case muxPort == 0:
+				missing = fmt.Errorf("%s: the host mux is unavailable", ref)
+			}
+			return "http://" + devHostname(scope, svc) + ":" + strconv.Itoa(muxPort)
+		})
+		if missing != nil {
+			return nil, missing
+		}
+		out = append(out, kv)
+	}
+	return out, nil
 }

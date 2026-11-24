@@ -302,27 +302,26 @@ func (b *embeddedBackend) WaitReady(ctx context.Context, name string, ready *pip
 	return space.WaitServiceReady(ctx, name, readyToRuntime(ready, timeout), b.l.ProbeCoords(name))
 }
 
-// RegisterHost publishes the service once it is Ready:
-//   - HTTP mux: <name>.<scope>.localhost:<muxPort> — HTTP-only, dispatched by
-//     Host header. No-op when the mux is unavailable.
-//   - TCP bind: 127.0.0.1:<containerPort> → container, for raw-TCP services
-//     (postgres, nats, …). OpenIngress prints the bound address, or the bind
-//     failure when another space or process holds the port.
+func (b *embeddedBackend) MuxPort() int {
+	if b.mux == nil {
+		return 0
+	}
+	return b.mux.BoundPort()
+}
+
+// RegisterHost routes <name>.<scope>.localhost on the stack's mux port to the
+// service. It never binds the container port on the host loopback: a fixed host
+// port collides across parallel stacks; raw TCP goes through `sklp dev forward`.
 func (b *embeddedBackend) RegisterHost(scope, name string, containerPort int) {
-	if containerPort == 0 {
+	if containerPort == 0 || b.mux == nil {
 		return
 	}
 	host := devHostname(scope, name)
-
-	if b.mux != nil {
-		b.mux.RegisterHost(host, b.l, name, containerPort)
-		b.mu.Lock()
-		b.hosts = append(b.hosts, host)
-		b.mu.Unlock()
-		fmt.Printf("↥ %s → http://%s:%d\n", name, host, b.mux.BoundPort())
-	}
-
-	b.l.OpenIngress(name, []space.PortMapping{{HostPort: containerPort, ContainerPort: containerPort}})
+	b.mux.RegisterHost(host, b.l, name, containerPort)
+	b.mu.Lock()
+	b.hosts = append(b.hosts, host)
+	b.mu.Unlock()
+	fmt.Printf("↥ %s → http://%s:%d\n", name, host, b.mux.BoundPort())
 }
 
 // Watch polls the container's runc state and closes the returned channel when
