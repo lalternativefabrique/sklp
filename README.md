@@ -45,6 +45,7 @@ you develop in.
 |---|---|
 | `sklp init` | Detects your repo and your AI assistant, writes a baseline `.sklp/` and repo-tailored skills |
 | `sklp dev <stack>` | Supervises the local dev stack from `.sklp/<stack>/dev.yaml`: ordering, readiness, logs, one Ctrl-C to stop |
+| `sklp dev forward <stack> <svc>` | Opens one service port (postgres, nats…) on a free `127.0.0.1` port until Ctrl-C; HTTP services are reached at `<svc>.<scope>.localhost` |
 | `sklp run <pipeline>` | Runs `.sklp/pipelines/<name>.yaml` locally in a space, only the steps whose scope the diff touches |
 | `sklp space up <name>` | Builds a closed environment from `.sklp/space.yaml` (base image, toolchains, packages) and drops you in |
 | `sklp deploy apply <stack>` | Applies `.sklp/<stack>/deploy.yaml` to a node, local or remote, over TLS with a bearer token |
@@ -177,14 +178,14 @@ binary you run stays on the Mac; every verb that needs Linux is relayed into the
 guest, with your home mounted at the same path.
 
 ```sh
-sklp dev web                              # your stack, ports on 127.0.0.1
+sklp dev web                              # your stack, at <svc>.<scope>.localhost
 sklp run publish                          # build and push from an arm64 Mac, linux/amd64 included
 sklp macos exec sklet apply api           # the VM is the node: a local deployment
 sklp macos status                         # up, down, build
 ```
 
-- **Dev stacks.** The ports a `dev.yaml` declares are published on the Mac for
-  as long as `sklp dev` runs, and `<svc>.<scope>.localhost` works too.
+- **Dev stacks.** `<svc>.<scope>.localhost` works on the Mac for as long as
+  `sklp dev` runs; `sklp dev forward <stack> postgres` publishes a raw TCP port.
 - **Your `node_modules` stay yours.** A `run:` service installs into a volume of
   the space, so a Linux `pnpm` never rewrites the Mac's native packages.
 - **Images for other architectures.** A `platform: linux/amd64` step runs through
