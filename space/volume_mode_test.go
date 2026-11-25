@@ -73,3 +73,40 @@ func TestEmptyOwnedVolumes_NewbornOwnedBySpaceUserCounts(t *testing.T) {
 		t.Fatalf("emptyOwnedVolumes = %v, want only the empty volume %s", got, empty)
 	}
 }
+
+func TestTakeImageModes_NeverFollowsALinkOutOfTheImage(t *testing.T) {
+	host := t.TempDir()
+	if err := os.Chmod(host, 0o777|os.ModeSticky); err != nil {
+		t.Fatal(err)
+	}
+	image := t.TempDir()
+	if err := os.Symlink(host, filepath.Join(image, "data")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(host, "sub"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(host, "sub"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	vols := t.TempDir()
+	leaf := filepath.Join(vols, "leaf")
+	parent := filepath.Join(vols, "parent")
+	for _, d := range []string{leaf, parent} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mounts := []DevMount{
+		{Source: leaf, Destination: "/data"},
+		{Source: parent, Destination: "/data/sub"},
+	}
+	takeImageModes([]string{leaf, parent}, mounts, image)
+
+	for _, d := range []string{leaf, parent} {
+		st, _ := os.Stat(d)
+		if st.Mode()&(os.ModePerm|os.ModeSticky) != 0o700 {
+			t.Fatalf("%s took %v through a link that leaves the image, want it left 0700", d, st.Mode())
+		}
+	}
+}
