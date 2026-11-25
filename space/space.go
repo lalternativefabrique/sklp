@@ -1144,7 +1144,7 @@ func takeImageModes(newborn []string, mounts []DevMount, imageTree string) {
 		if !born[m.Source] {
 			continue
 		}
-		st, err := os.Stat(filepath.Join(imageTree, filepath.Clean("/"+m.Destination)))
+		st, err := lstatInImage(imageTree, m.Destination)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			_ = os.Chmod(m.Source, 0o755)
@@ -1152,6 +1152,31 @@ func takeImageModes(newborn []string, mounts []DevMount, imageTree string) {
 			_ = os.Chmod(m.Source, st.Mode()&(fs.ModePerm|fs.ModeSticky|fs.ModeSetgid))
 		}
 	}
+}
+
+// lstatInImage stats dest inside the image tree without following any link:
+// the tree sits on the host, so an image link such as /data -> /tmp would
+// otherwise read the host's /tmp. A link anywhere on the path is an error.
+func lstatInImage(imageTree, dest string) (fs.FileInfo, error) {
+	p := imageTree
+	var st fs.FileInfo
+	for _, part := range strings.Split(strings.Trim(filepath.Clean("/"+dest), "/"), "/") {
+		if part == "" {
+			continue
+		}
+		p = filepath.Join(p, part)
+		var err error
+		if st, err = os.Lstat(p); err != nil {
+			return nil, err
+		}
+		if st.Mode()&fs.ModeSymlink != 0 {
+			return nil, fmt.Errorf("%s is a link in the image", p)
+		}
+	}
+	if st == nil {
+		return os.Lstat(imageTree)
+	}
+	return st, nil
 }
 
 func lchownAll(paths []string, uid int) error {
@@ -1194,9 +1219,6 @@ func anyUnder(mounts []DevMount, root string) bool {
 	return false
 }
 
-// volumesToHand sorts the volume mounts under volumesRoot: empty directories
-// not yet owned by wantUID are handed over; non-empty ones with another owner
-// are reported.
 // emptyOwnedVolumes lists the empty volumes that already belong to wantUID,
 // which volumesToHand skips: in a space without a child user namespace the
 // container root is the space user itself, so every newborn volume lands here.
@@ -1221,6 +1243,9 @@ func emptyOwnedVolumes(mounts []DevMount, volumesRoot string, wantUID int) []str
 	return out
 }
 
+// volumesToHand sorts the volume mounts under volumesRoot: empty directories
+// not yet owned by wantUID are handed over; non-empty ones with another owner
+// are reported.
 func volumesToHand(mounts []DevMount, volumesRoot string, wantUID int) (hand, foreign []string) {
 	prefix := volumesRoot + string(os.PathSeparator)
 	for _, m := range mounts {
