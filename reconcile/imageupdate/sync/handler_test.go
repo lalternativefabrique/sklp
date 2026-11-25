@@ -357,3 +357,62 @@ watches:
 		t.Fatalf("saved = %+v, want nothing for a node this stack cannot reach", repo.saved)
 	}
 }
+
+func TestHandleTakesOverWatchOfRenamedRepoOnSameTarget(t *testing.T) {
+	old, _ := domain.NewWatch("s1", "shop-api", "rg.example/old/api", "", "api",
+		"https://flight:6464", "production", "tok", "")
+	old.ID = "w1"
+	old.SourceRepo = "acme/old-name"
+	old.CurrentTag = "20260101-0000-abcdef0"
+	repo := newStubRepo(old)
+
+	yaml := `
+watches:
+  - name: shop-api
+    service: api
+    image_repo: rg.example/new/api
+    node: flight
+    space: production
+`
+	h := New(repo, stubFetcher{content: yaml}, stubNodes{node: testNode()}, staticDecrypter{token: "s3cret"})
+
+	if err := h.Handle(context.Background(), Command{StackID: "s1", Repo: "acme/new-name", Ref: "abc123"}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(repo.saved) != 0 || len(repo.updated) != 1 {
+		t.Fatalf("saved = %d, updated = %d, want the existing row updated in place", len(repo.saved), len(repo.updated))
+	}
+	got := repo.updated[0]
+	if got.ID != "w1" || got.SourceRepo != "acme/new-name" || got.ImageRepo != "rg.example/new/api" {
+		t.Fatalf("got = %+v, want w1 owned by acme/new-name on the new image", got)
+	}
+	if got.CurrentTag != "20260101-0000-abcdef0" {
+		t.Fatalf("CurrentTag = %q, want runtime state preserved", got.CurrentTag)
+	}
+}
+
+func TestHandleSkipsNameDeclaredByAnotherRepoOnAnotherTarget(t *testing.T) {
+	other, _ := domain.NewWatch("s1", "web", "rg.example/other/web", "", "web",
+		"https://flight:6464", "other-production", "tok", "")
+	other.ID = "w1"
+	other.SourceRepo = "acme/other"
+	repo := newStubRepo(other)
+
+	yaml := `
+watches:
+  - name: web
+    service: web
+    image_repo: rg.example/shop/web
+    node: flight
+    space: production
+`
+	h := New(repo, stubFetcher{content: yaml}, stubNodes{node: testNode()}, staticDecrypter{token: "s3cret"})
+
+	if err := h.Handle(context.Background(), Command{StackID: "s1", Repo: "acme/widgets", Ref: "abc123"}); err != nil {
+		t.Fatalf("Handle: %v", err)
+	}
+	if len(repo.saved) != 0 || len(repo.updated) != 0 || len(repo.deleted) != 0 {
+		t.Fatalf("saved = %v, updated = %v, deleted = %v, want the other repo's watch untouched",
+			repo.saved, repo.updated, repo.deleted)
+	}
+}

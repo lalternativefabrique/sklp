@@ -126,9 +126,12 @@ func (h *Handler) Handle(ctx context.Context, cmd Command) error {
 	// SourceRepo is empty). A legacy row matched by name is adopted so the
 	// column backfills on the first push after the migration.
 	byName := make(map[string]*domain.Watch, len(existing))
+	foreign := make(map[string]*domain.Watch)
 	for _, w := range existing {
 		if w.SourceRepo == cmd.Repo || w.SourceRepo == "" {
 			byName[w.Name] = w
+		} else {
+			foreign[w.Name] = w
 		}
 	}
 
@@ -148,7 +151,21 @@ func (h *Handler) Handle(ctx context.Context, cmd Command) error {
 		}
 		watch.SourceRepo = cmd.Repo
 
-		if current, ok := byName[entry.Name]; ok {
+		current, ok := byName[entry.Name]
+		if other, taken := foreign[entry.Name]; taken && !ok {
+			// A renamed GitHub repo pushes under its new name: its old rows only match by target.
+			if !sameTarget(other, watch) {
+				slog.Warn("imageupdate: watch name already declared by another repo, skipping",
+					"stack_id", cmd.StackID, "name", entry.Name,
+					"owner", other.SourceRepo, "repo", cmd.Repo)
+				continue
+			}
+			slog.Info("imageupdate: taking over watch declared by another repo on the same target",
+				"stack_id", cmd.StackID, "name", entry.Name,
+				"from", other.SourceRepo, "to", cmd.Repo)
+			current, ok = other, true
+		}
+		if ok {
 			watch.ID = current.ID
 			watch.Enabled = current.Enabled
 			watch.CurrentTag = current.CurrentTag
@@ -233,4 +250,8 @@ func (h *Handler) credentialFor(ctx context.Context, stackID, nodeName, nodeID s
 		return h.nodes.Credential(ctx, stackID, nodeName)
 	}
 	return h.nodes.CredentialByID(ctx, stackID, nodeID)
+}
+
+func sameTarget(a, b *domain.Watch) bool {
+	return a.NodeServer == b.NodeServer && a.NodeSpace == b.NodeSpace && a.Service == b.Service
 }
