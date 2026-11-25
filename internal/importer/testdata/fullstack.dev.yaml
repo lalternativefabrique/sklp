@@ -41,7 +41,7 @@ services:
       log: Ready to accept connections
       timeout: 60s
 
-  # TODO(import): volumes: ./db/migrations:/migrations is a host bind mount, and sklp only mounts named volumes. Bake the file into an image (`FROM migrate/migrate:v4.17.0` + `COPY db/migrations /migrations`) and use that image, or pass the setting through env:
+  # TODO(import): volumes: ./db/migrations:/migrations is a host bind mount, and sklp only mounts named volumes. Bake the file into an image (`FROM migrate/migrate:v4.17.0` + `COPY db/migrations /migrations`) and use that image, or pass the setting through env
   # import: oneshot: marked oneshot: api waits for it to exit 0 (condition service_completed_successfully)
   migrate:
     image: migrate/migrate:v4.17.0

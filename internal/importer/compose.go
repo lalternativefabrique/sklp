@@ -144,7 +144,7 @@ var droppedFields = map[string]string{
 	"restart":           "sklp dev does not restart a crashed service; the stack reports it",
 	"labels":            "no labels in sklp dev",
 	"logging":           "logs are streamed by sklp dev, prefixed by service",
-	"stdin_open":        "no interactive stdin; use `sklp dev exec`",
+	"stdin_open":        "sklp dev attaches no stdin to a service",
 	"tty":               "no TTY allocation",
 	"init":              "sklp runs its own init as PID 1",
 	"stop_grace_period": "sklp dev sends SIGTERM then SIGKILL after its own grace period",
@@ -844,10 +844,30 @@ func (t *translator) imageVolume(s *devService, src, dst, mode string) {
 	case strings.HasPrefix(src, "/") || strings.HasPrefix(src, ".") || strings.Contains(src, "/"):
 		s.note(Manual, "volumes", "%s", bindAdvice(s.image, src, dst))
 	default:
+		if path.Clean(dst) == "/var/lib/postgresql/data" && postgres18OrUnpinned(s.image) {
+			dst = "/var/lib/postgresql"
+			s.note(Info, "volumes", "%s moved from /var/lib/postgresql/data to /var/lib/postgresql: %s is PostgreSQL 18 or later (or unpinned), which refuses to start on the old mount point; the volume starts empty, so nothing is lost", src, s.image)
+		}
 		s.volumes = append(s.volumes, src+":"+dst+suffix)
 		t.namedVolumes = append(t.namedVolumes, src)
 		t.checkTopVolume(s, src)
 	}
+}
+
+var pgMajorRE = regexp.MustCompile(`^(\d+)`)
+
+// postgres18OrUnpinned reports whether a postgres image resolves to 18+,
+// whose entrypoint refuses data mounted at /var/lib/postgresql/data.
+func postgres18OrUnpinned(image string) bool {
+	if imageLogPattern(image) != "database system is ready to accept connections" {
+		return false
+	}
+	tag := imageTag(image)
+	m := pgMajorRE.FindStringSubmatch(tag)
+	if m == nil {
+		return !strings.Contains(image, "timescale") && !strings.Contains(image, "postgis") && !strings.Contains(image, "pgvector")
+	}
+	return atoi(m[1]) >= 18
 }
 
 // bindAdvice explains how to replace a host bind, which sklp refuses
@@ -860,7 +880,7 @@ func bindAdvice(image, src, dst string) string {
 	case strings.HasPrefix(src, "/") || strings.HasPrefix(src, "~"):
 		return base + fmt.Sprintf("The path only exists on this machine: bake what the service needs into an image (`FROM %s` + `COPY`), or drop the mount", image)
 	}
-	return base + fmt.Sprintf("Bake the file into an image (`FROM %s` + `COPY %s %s`) and use that image, or pass the setting through env:", image, strings.TrimPrefix(src, "./"), dst)
+	return base + fmt.Sprintf("Bake the file into an image (`FROM %s` + `COPY %s %s`) and use that image, or pass the setting through env", image, strings.TrimPrefix(src, "./"), dst)
 }
 
 func (t *translator) checkTopVolume(s *devService, name string) {

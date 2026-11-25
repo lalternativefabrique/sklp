@@ -55,8 +55,12 @@ func runComposeImport(repoAbs, stack string, force, ascii bool) int {
 	}
 	manual := importer.ManualCount(imp.res.Notes)
 	rep.StepFinished("importing compose", reporter.StatusPassed, time.Since(start), fmt.Sprintf("%d manual action(s)", manual))
+	next := fmt.Sprintf("sklp dev %s", stack)
+	if manual > 0 {
+		next = fmt.Sprintf("resolve TODO(import) in %s · sklp dev %s --validate", imp.rel, stack)
+	}
 	rep.Finalize("IMPORT", reporter.StatusPassed, time.Since(start), nil,
-		[]reporter.FinalField{{Label: "next", Value: fmt.Sprintf("resolve TODO(import) in %s · sklp dev %s --validate", imp.rel, stack)}})
+		[]reporter.FinalField{{Label: "next", Value: next}})
 	printImportReport(os.Stderr, imp)
 	return 0
 }

@@ -266,3 +266,22 @@ func todoComments(y []byte) int {
 	}
 	return n
 }
+
+func TestPostgres18MountMovesToTheNewDataRoot(t *testing.T) {
+	cases := map[string]bool{
+		"postgres:latest":                   true,
+		"postgres:alpine":                   true,
+		"postgres":                          true,
+		"postgres:18":                       true,
+		"postgres:18.1-alpine":              true,
+		"postgres:16-alpine":                false,
+		"postgis/postgis:16-3.4":            false,
+		"timescale/timescaledb:latest-pg16": false,
+		"mariadb:10.6":                      false,
+	}
+	for image, want := range cases {
+		if got := postgres18OrUnpinned(image); got != want {
+			t.Errorf("postgres18OrUnpinned(%q) = %v, want %v", image, got, want)
+		}
+	}
+}
