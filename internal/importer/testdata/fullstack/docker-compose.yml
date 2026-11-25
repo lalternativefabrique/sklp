@@ -1,0 +1,84 @@
+x-common-env: &common-env
+  TZ: Europe/Paris
+
+services:
+  postgres:
+    image: postgres:${PG_VERSION:-16}-alpine
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: app
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    command: redis-server --appendonly yes
+    expose:
+      - "6379"
+
+  migrate:
+    image: migrate/migrate:v4.17.0
+    command: ["-path", "/migrations", "-database", "postgres://app:${POSTGRES_PASSWORD:-secret}@postgres:5432/app?sslmode=disable", "up"]
+    volumes:
+      - ./db/migrations:/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ./api
+      args:
+        GO_VERSION: "1.25"
+    image: acme/api:dev
+    working_dir: /app
+    command: go run ./cmd/api
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://app:${POSTGRES_PASSWORD:-secret}@postgres:5432/app
+      - REDIS_URL=redis://redis:6379
+      - API_KEY
+      - LOG_LEVEL=${LOG_LEVEL}
+    env_file: .env.api
+    volumes:
+      - ./api:/app
+      - /app/tmp
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+
+  web:
+    build: ./web
+    ports:
+      - "3000:5173"
+    volumes:
+      - ./web:/usr/src/app
+      - /usr/src/app/node_modules
+    working_dir: /usr/src/app
+    depends_on:
+      - api
+
+  mailpit:
+    image: axllent/mailpit:v1.20
+    profiles: [mail]
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+volumes:
+  pgdata:

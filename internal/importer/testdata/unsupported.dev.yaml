@@ -1,0 +1,44 @@
+# Imported from compose.yaml by `sklp init`.
+# 20 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# TODO(import): include: included compose files [other.yaml] are not imported: re-run on a merged file (`docker compose config > compose.yaml`) or add their services by hand
+# TODO(import): secrets: top-level secrets are not supported: pass values through .env, bake files into the image (`COPY`)
+# import: volumes: named volumes certs start empty under sklp: data in the existing docker volumes is not copied (dump/restore it if you need it)
+version: 1
+kind: devstack
+name: dev
+allowHost: true
+
+services:
+  # TODO(import): entrypoint: image services cannot replace the image ENTRYPOINT (/custom-entrypoint.sh): command: is appended to the image's own ENTRYPOINT. Use an image whose ENTRYPOINT fits, or turn it into a run: service
+  # TODO(import): volumes: /var/run/docker.sock: there is no Docker daemon under sklp; the service cannot drive containers
+  # TODO(import): volumes: ~/.config/traefik:/etc/traefik is a host bind mount, and sklp only mounts named volumes. The path only exists on this machine: bake what the service needs into an image (`FROM traefik:v3.1` + `COPY`), or drop the mount
+  # TODO(import): volumes: volume certs is external in compose (created outside it); sklp creates it empty — restore its data if the service needs it
+  # TODO(import): network_mode: "host" is not supported: every service joins the stack network and is reached by its name; replace any localhost:<port> that meant another service with <service>:<port>
+  # TODO(import): extra_hosts: host.docker.internal → host-gateway: `allowHost: true` is set so the service can reach your machine, but host.docker.internal does not resolve — use your machine's LAN IP in its config
+  # TODO(import): cap_add: added capabilities are refused by sklp's admission policy; the service must run with the default set
+  # TODO(import): frobnicate: no sklp dev equivalent for this compose field; check what it does for the service and reproduce it by hand
+  # TODO(import): privileged: privileged containers are refused by sklp; find which capability the service really needs and remove the dependency
+  # TODO(import): secrets: compose secrets are files under /run/secrets; sklp dev has none — pass the value through env (from .env) or a volume
+  # TODO(import): tmpfs: no tmpfs mounts: declare a named volume on that path instead (e.g. `<svc>-tmp:/tmp`)
+  # TODO(import): user: sklp runs the container as the image's user inside a rootless user namespace; there is no `user:` override — bake the user into the image or drop the need
+  # TODO(import): ready: other services depend on it but it has no port nor known log line: set ready.log to the line it prints once ready, or dependents wait on sklp's generic log pattern and may time out
+  proxy:
+    image: traefik:v3.1
+    network: bridge
+    volumes:
+      - certs:/certs
+
+  # TODO(import): run: no runnable app detected in docker/worker and no compose command:; write the start command. If this Dockerfile only customises nginx:1.27, build it as an image and use `image:` (sklp dev does not build images; publish it with a pipeline, or use `image: nginx:1.27` if the copied files (nginx.conf) can come from env)
+  # TODO(import): ports: port range "9000-9002:9000-9002": dev.yaml declares one port per service; only 9000 is imported — reach the others in-stack at worker:<port> or with `sklp dev forward app worker:<port>`
+  # import: ports: host port 9000 is not bound by sklp dev: HTTP at http://worker.<scope>.localhost, raw TCP with `sklp dev forward app worker:9000`
+  # TODO(import): ports: 53/udp: sklp dev routes and forwards TCP only
+  # import: ports: host port 5353 (container 53) is not bound by sklp dev: reach it with `sklp dev forward app worker:53 5353`
+  # import: ports: port: is 9000 (the first one compose lists); 53 stay reachable in-stack at worker:<port>, and from the host with `sklp dev forward app worker:<port>`
+  # TODO(import): networks: aliases jobs do not resolve in sklp dev, only "worker" does: replace those hostnames in the other services' config
+  # TODO(import): depends_on: ghost is not a service of this compose project: remove the dependency or add the service
+  worker:
+    run: 'echo ''sklp import: worker has no start command yet (no start command found for docker/worker); see TODO(import) in this file'' >&2; exit 1'
+    workdir: docker/worker
+    port: 9000
+    depends_on:
+      - proxy

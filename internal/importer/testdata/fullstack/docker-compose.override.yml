@@ -1,0 +1,4 @@
+services:
+  redis:
+    environment:
+      REDIS_ARGS: "--save 60 1"

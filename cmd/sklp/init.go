@@ -50,22 +50,31 @@ func initCommand() cli.Command {
 			{Name: "agent", Type: cli.StringFlag, Usage: "skip detection and install skills for this assistant (claude|cursor|codex|vibe|zed|cline); 'none' forces the deterministic baseline"},
 			{Name: "no-run", Type: cli.BoolFlag, Usage: "install skills but do NOT hand off to the agent; just print how to run them"},
 			{Name: "ascii", Type: cli.BoolFlag, Usage: "use ASCII fallback glyphs instead of UTF-8 symbols"},
+			{Name: "from", Type: cli.StringFlag, Usage: "only import an existing setup into .sklp: 'compose' translates compose.yaml / docker-compose.yml into <stack>/dev.yaml and lists the manual actions left"},
+			{Name: "stack", Type: cli.StringFlag, StringDefault: layout.DefaultStack, Usage: "stack directory under .sklp/ the import writes to"},
 		},
 		Run: func(ctx context.Context, args cli.Args) int {
-			return runInit(args.String("repo"), args.String("agent"),
+			repoAbs, err := filepath.Abs(args.String("repo"))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "sklp init: repo abs: %v\n", err)
+				return 1
+			}
+			switch from := args.String("from"); from {
+			case "":
+			case "compose":
+				return runComposeImport(repoAbs, args.String("stack"), args.Bool("force"), args.Bool("ascii"))
+			default:
+				fmt.Fprintf(os.Stderr, "sklp init: -from %q: only 'compose' is supported\n", from)
+				return 2
+			}
+			return runInit(repoAbs, args.String("agent"), args.String("stack"),
 				args.Bool("force"), args.Bool("yes"), args.Bool("no-run"), args.Bool("ascii"))
 		},
 	}
 }
 
 // runInit is the init verb core. It returns the process exit code.
-func runInit(repoFlag, agentFlag string, force, yes, noRun, ascii bool) int {
-	repoAbs, err := filepath.Abs(repoFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sklp init: repo abs: %v\n", err)
-		return 1
-	}
-
+func runInit(repoAbs, agentFlag, stack string, force, yes, noRun, ascii bool) int {
 	rep := reporter.New(os.Stderr, reporter.Options{ASCII: ascii})
 	rep.Header("sklp init")
 	rep.SubAction("project    " + repoAbs)
@@ -75,7 +84,7 @@ func runInit(repoFlag, agentFlag string, force, yes, noRun, ascii bool) int {
 	chosen, useBaseline := resolveInitAgent(repoAbs, agentFlag, yes)
 
 	if useBaseline {
-		if err := writeBaseline(repoAbs, force, rep); err != nil {
+		if err := writeBaseline(repoAbs, stack, force, rep); err != nil {
 			fmt.Fprintf(os.Stderr, "sklp init: %v\n", err)
 			return 1
 		}
@@ -99,15 +108,32 @@ func runInit(repoFlag, agentFlag string, force, yes, noRun, ascii bool) int {
 		return 1
 	}
 
-	if handOff {
-		runAgentInit(repoAbs, chosen, yes, rep)
+	imp, err := importCompose(repoAbs, stack, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sklp init: compose import: %v\n", err)
+		return 1
 	}
+	if imp != nil {
+		rep.SubAction("imported " + imp.rel + " from " + strings.Join(imp.res.Sources, " + "))
+	}
+	if handOff {
+		runAgentInit(repoAbs, chosen, yes, handoffPrompt(imp), rep)
+	}
+	printImportReport(os.Stderr, imp)
 	return 0
 }
 
 // initHandoffPrompt is what sklp feeds the agent in headless mode. It
 // points at the installed skills and asks for the deterministic-but-
 // reasoned contract generation we'd otherwise do by hand.
+func handoffPrompt(imp *composeImported) string {
+	if imp == nil {
+		return initHandoffPrompt
+	}
+	return initHandoffPrompt + " " + imp.rel + " was already translated from " + strings.Join(imp.res.Sources, " + ") +
+		" by sklp: start from it, resolve every TODO(import) comment it carries, keep its services, and move it to dev.yaml if it is a .draft."
+}
+
 const initHandoffPrompt = "Use the init-config, init-dev and init-ci skills installed under this repo's " +
 	"skills directory to generate the sklp contracts: .sklp/space.yaml, .sklp/stack/dev.yaml and " +
 	".sklp/pipelines/ci.yaml. Read the repo to infer the real toolchain, services, database readiness " +
@@ -117,12 +143,12 @@ const initHandoffPrompt = "Use the init-config, init-dev and init-ci skills inst
 // runAgentInit invokes the chosen agent non-interactively on the repo so
 // it generates the contracts itself. Best-effort: a missing headless mode
 // or a declined confirmation falls back to the printed manual hint.
-func runAgentInit(repoAbs string, target skillgen.Target, yes bool, rep reporter.Reporter) {
+func runAgentInit(repoAbs string, target skillgen.Target, yes bool, prompt string, rep reporter.Reporter) {
 	agent, ok := agentdetect.AgentForTarget(target)
 	if !ok {
 		return
 	}
-	bin, args, ok := agent.HeadlessCommand(initHandoffPrompt)
+	bin, args, ok := agent.HeadlessCommand(prompt)
 	if !ok {
 		// No headless mode / binary not on PATH — manual hint already shown.
 		return
@@ -313,7 +339,7 @@ func installAgentSkills(repoAbs string, target skillgen.Target, force, willHandO
 // tasks/ci.yaml.draft. ci is a .draft so the operator reviews before it
 // becomes the live contract; config + dev are written directly because
 // `sklp dev stack --validate` / `sklp runner build` are the review step.
-func writeBaseline(repoAbs string, force bool, rep reporter.Reporter) error {
+func writeBaseline(repoAbs, stack string, force bool, rep reporter.Reporter) error {
 	rep.SubAction("mode       deterministic baseline (no assistant)")
 	rep.StepStarted("scanning project")
 	start := time.Now()
@@ -331,12 +357,20 @@ func writeBaseline(repoAbs string, force bool, rep reporter.Reporter) error {
 		draft bool
 	}
 	configYAML, configNotes := repofacts.RunnerConfig(facts)
-	devYAML, devNotes := repofacts.DevConfig(repoAbs)
 	ciYAML, ciNotes := repofacts.CIConfig(facts)
 	arts := []artifact{
 		{rel: filepath.Join(".sklp", "space.yaml"), yaml: configYAML, notes: configNotes},
-		{rel: filepath.Join(".sklp", layout.DefaultStack, "dev.yaml"), yaml: devYAML, notes: devNotes},
 		{rel: filepath.Join(".sklp", "pipelines", "ci.yaml.draft"), yaml: ciYAML, notes: ciNotes, draft: true},
+	}
+	imp, err := importCompose(repoAbs, stack, force)
+	if err != nil {
+		return fmt.Errorf("compose import: %w", err)
+	}
+	if imp == nil {
+		devYAML, devNotes := repofacts.DevConfig(repoAbs)
+		arts = append(arts, artifact{rel: filepath.Join(".sklp", stack, "dev.yaml"), yaml: devYAML, notes: devNotes})
+	} else {
+		rep.SubAction("imported " + imp.rel + " from " + strings.Join(imp.res.Sources, " + "))
 	}
 
 	rep.StepStarted("writing contracts")
@@ -369,6 +403,7 @@ func writeBaseline(repoAbs string, force bool, rep reporter.Reporter) error {
 	for _, n := range reviewNotes {
 		rep.SubAction("review: " + n)
 	}
+	printImportReport(os.Stderr, imp)
 	return nil
 }
 

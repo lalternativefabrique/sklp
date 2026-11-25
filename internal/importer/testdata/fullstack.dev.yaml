@@ -1,0 +1,102 @@
+# Imported from docker-compose.yml + docker-compose.override.yml by `sklp init`.
+# 7 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: env_files: sklp dev loads .env, .env.api into every service of the stack, whereas compose scoped env_file: to one service and read .env only to interpolate the compose file
+# import: volumes: named volumes pgdata start empty under sklp: data in the existing docker volumes is not copied (dump/restore it if you need it)
+version: 1
+kind: devstack
+name: dev
+
+env_files:
+  - .env
+  - .env.api
+
+services:
+  # import: ports: host port 5433 (container 5432) is not bound by sklp dev: reach it with `sklp dev forward app postgres:5432 5433`
+  # TODO(import): volumes: ./db/init.sql:/docker-entrypoint-initdb.d/init.sql is a host bind mount, and sklp only mounts named volumes. For init scripts: bake them into an image (`FROM postgres:16-alpine` + `COPY db/init.sql /docker-entrypoint-initdb.d/init.sql`), or run them from a oneshot run: service that depends on this one (e.g. `psql "$DATABASE_URL" -f db/init.sql`)
+  # import: healthcheck: `pg_isready -U app` replaced by the log line "database system is ready to accept connections": sklp dev cannot exec into the container
+  # import: restart: dropped: sklp dev does not restart a crashed service; the stack reports it
+  postgres:
+    image: postgres:16-alpine
+    network: bridge
+    port: 5432
+    env:
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: secret
+      POSTGRES_USER: app
+      TZ: Europe/Paris
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ready:
+      log: database system is ready to accept connections
+      timeout: 50s
+
+  redis:
+    image: redis:7
+    network: bridge
+    port: 6379
+    command: [redis-server, --appendonly, "yes"]
+    env:
+      REDIS_ARGS: --save 60 1
+    ready:
+      log: Ready to accept connections
+      timeout: 60s
+
+  # TODO(import): volumes: ./db/migrations:/migrations is a host bind mount, and sklp only mounts named volumes. Bake the file into an image (`FROM migrate/migrate:v4.17.0` + `COPY db/migrations /migrations`) and use that image, or pass the setting through env
+  # import: oneshot: marked oneshot: api waits for it to exit 0 (condition service_completed_successfully)
+  migrate:
+    image: migrate/migrate:v4.17.0
+    network: bridge
+    command: [-path, /migrations, -database, 'postgres://app:secret@postgres:5432/app?sslmode=disable', up]
+    oneshot: true
+    depends_on:
+      - postgres
+
+  # TODO(import): build: build args GO_VERSION only existed at image build time; if the app reads them at runtime, add them to env:
+  # import: run: taken from compose command:, which ran inside the image; check it works from api with the toolchain of .sklp/space.yaml
+  # TODO(import): build: Dockerfile installs apt packages ca-certificates libvips-dev: add the ones the app needs at runtime to `runner.packages` in .sklp/space.yaml
+  # import: image: "acme/api:dev" is the tag compose gives the built image; sklp dev runs the source instead and pulls nothing
+  # import: working_dir: /app is ignored: the service runs in api (the repo is mounted at /workspace)
+  # TODO(import): environment: compose passed API_KEY through from your shell; sklp dev containers never inherit the shell environment — set API_KEY in .env
+  # import: environment: LOG_LEVEL inlined from .env.example
+  # import: env_file: .env.api moved to the stack-level env_files: its variables now reach every service
+  # import: ports: host port 8080 is not bound by sklp dev: HTTP at http://api.<scope>.localhost, raw TCP with `sklp dev forward app api:8080`
+  # import: volumes: ./api:/app dropped: the repo is already mounted at /workspace and the service runs from api
+  # import: volumes: anonymous volume on /app/tmp dropped: run: services write into the repo mount
+  # import: healthcheck: `wget -qO- http://localhost:8080/healthz` imported as an HTTP probe (2xx expected)
+  api:
+    run: go run ./cmd/api
+    workdir: api
+    port: 8080
+    env:
+      DATABASE_URL: postgres://app:secret@postgres:5432/app
+      LOG_LEVEL: debug
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - migrate
+      - redis
+    ready:
+      http: /healthz
+      timeout: 90s
+
+  # import: run: inferred from web/package.json (package.json scripts.dev present); the Dockerfile CMD is not used
+  # TODO(import): build: Dockerfile installs apk (Alpine) packages git: find their Debian names and add them to `runner.packages` in .sklp/space.yaml
+  # import: working_dir: /usr/src/app is ignored: the service runs in web (the repo is mounted at /workspace)
+  # import: ports: host port 3000 (container 5173) is not bound by sklp dev: reach it with `sklp dev forward app web:5173 3000`
+  # import: volumes: ./web:/usr/src/app dropped: the repo is already mounted at /workspace and the service runs from web
+  # import: volumes: /usr/src/app/node_modules dropped: sklp dev manages node_modules volumes itself
+  web:
+    run: npm run dev
+    workdir: web
+    port: 5173
+    depends_on:
+      - api
+
+  # import: ports: host port 8025 is not bound by sklp dev: HTTP at http://mailpit.<scope>.localhost, raw TCP with `sklp dev forward app mailpit:8025`
+  # import: ports: host port 1025 is not bound by sklp dev: reach it from the host with `sklp dev forward app mailpit:1025`
+  # import: ports: port: is 8025 (the first one compose lists); 1025 stay reachable in-stack at mailpit:<port>, and from the host with `sklp dev forward app mailpit:<port>`
+  # TODO(import): profiles: compose starts it only with --profile mail; it is imported as `optional: true`, and sklp dev never starts optional services today — remove `optional: true` to run it
+  mailpit:
+    image: axllent/mailpit:v1.20
+    network: bridge
+    port: 8025
+    optional: true
