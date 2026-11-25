@@ -2,6 +2,7 @@ package space
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -1094,7 +1095,7 @@ func (s *Space) handNewVolumes(cnet *spaceNet, ident ociproc.Identity, svcName s
 		return
 	}
 	hand, foreign := volumesToHand(mounts, s.volumesRoot(), wantHost)
-	takeImageModes(hand, mounts, imageTree)
+	takeImageModes(append(hand, emptyOwnedVolumes(mounts, s.volumesRoot(), wantHost)...), mounts, imageTree)
 	child := s.childUserns && cnet != nil
 	if child {
 		if len(hand)+len(foreign) == 0 && !anyUnder(mounts, s.volumesRoot()) {
@@ -1128,6 +1129,9 @@ func (s *Space) handNewVolumes(cnet *spaceNet, ident ociproc.Identity, svcName s
 // point, as Docker does when it creates a named volume: postgres:18 ships
 // /var/lib/postgresql 1777 because its entrypoint drops to the postgres user
 // before creating PGDATA inside it, and a 0700 volume there refuses it.
+// Where the image has nothing at the mount point, Docker creates the volume
+// 0755: gitea's entrypoint runs as root, then serves as `git` from /data, an
+// absent path in its image, and a 0700 volume there denies it.
 func takeImageModes(newborn []string, mounts []DevMount, imageTree string) {
 	if imageTree == "" {
 		return
@@ -1141,10 +1145,12 @@ func takeImageModes(newborn []string, mounts []DevMount, imageTree string) {
 			continue
 		}
 		st, err := os.Stat(filepath.Join(imageTree, filepath.Clean("/"+m.Destination)))
-		if err != nil || !st.IsDir() {
-			continue
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			_ = os.Chmod(m.Source, 0o755)
+		case err == nil && st.IsDir():
+			_ = os.Chmod(m.Source, st.Mode()&(fs.ModePerm|fs.ModeSticky|fs.ModeSetgid))
 		}
-		_ = os.Chmod(m.Source, st.Mode()&(fs.ModePerm|fs.ModeSticky|fs.ModeSetgid))
 	}
 }
 
@@ -1191,6 +1197,30 @@ func anyUnder(mounts []DevMount, root string) bool {
 // volumesToHand sorts the volume mounts under volumesRoot: empty directories
 // not yet owned by wantUID are handed over; non-empty ones with another owner
 // are reported.
+// emptyOwnedVolumes lists the empty volumes that already belong to wantUID,
+// which volumesToHand skips: in a space without a child user namespace the
+// container root is the space user itself, so every newborn volume lands here.
+func emptyOwnedVolumes(mounts []DevMount, volumesRoot string, wantUID int) []string {
+	prefix := volumesRoot + string(os.PathSeparator)
+	var out []string
+	for _, m := range mounts {
+		if !strings.HasPrefix(m.Source, prefix) {
+			continue
+		}
+		st, err := os.Stat(m.Source)
+		if err != nil || !st.IsDir() {
+			continue
+		}
+		if sys, ok := st.Sys().(*syscall.Stat_t); !ok || int(sys.Uid) != wantUID {
+			continue
+		}
+		if entries, err := os.ReadDir(m.Source); err == nil && len(entries) == 0 {
+			out = append(out, m.Source)
+		}
+	}
+	return out
+}
+
 func volumesToHand(mounts []DevMount, volumesRoot string, wantUID int) (hand, foreign []string) {
 	prefix := volumesRoot + string(os.PathSeparator)
 	for _, m := range mounts {
