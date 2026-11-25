@@ -1,0 +1,12 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports: ["5432:5432"]
+  nats:
+    image: nats:2.10
+    command: "-js -sd /data"
+    volumes: ["natsdata:/data"]
+volumes:
+  natsdata: {}

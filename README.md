@@ -44,6 +44,7 @@ you develop in.
 | Verb | What it does |
 |---|---|
 | `sklp init` | Detects your repo and your AI assistant, writes a baseline `.sklp/` and repo-tailored skills |
+| `sklp init -from compose` | Translates the root `compose.yaml` / `docker-compose.yml` (+ override) into `.sklp/<stack>/dev.yaml` and lists every manual action left, also written as `# TODO(import):` comments in the file |
 | `sklp dev <stack>` | Supervises the local dev stack from `.sklp/<stack>/dev.yaml`: ordering, readiness, logs, one Ctrl-C to stop |
 | `${mux:<svc>}` in a dev.yaml env value | Expands to `http://<svc>.<scope>.localhost:<muxPort>`, the address the host browser reaches that service at (presigned S3 URLs, OIDC redirects, e-mail links) |
 | `sklp dev forward <stack> <svc>` | Opens one service port (postgres, nats…) on a free `127.0.0.1` port until Ctrl-C; HTTP services are reached at `<svc>.<scope>.localhost` |

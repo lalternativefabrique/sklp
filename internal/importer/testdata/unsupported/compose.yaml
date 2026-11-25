@@ -1,0 +1,35 @@
+name: weird
+services:
+  proxy:
+    image: traefik:v3.1
+    entrypoint: ["/custom-entrypoint.sh"]
+    privileged: true
+    cap_add: [NET_ADMIN]
+    network_mode: host
+    user: "1000:1000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.config/traefik:/etc/traefik
+      - certs:/certs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    secrets: [cf_token]
+    tmpfs: /run
+    frobnicate: true
+  worker:
+    build: ./docker/worker
+    networks:
+      backend:
+        aliases: [jobs]
+    depends_on: [ghost, proxy]
+    ports:
+      - "9000-9002:9000-9002"
+      - "5353:53/udp"
+volumes:
+  certs:
+    external: true
+secrets:
+  cf_token:
+    file: ./cf_token.txt
+include:
+  - other.yaml

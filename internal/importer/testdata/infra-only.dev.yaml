@@ -1,0 +1,28 @@
+# Imported from compose.yml by `sklp init`.
+# 1 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: volumes: named volumes natsdata start empty under sklp: data in the existing docker volumes is not copied (dump/restore it if you need it)
+version: 1
+kind: devstack
+name: dev
+
+services:
+  # import: ports: host port 5432 is not bound by sklp dev: reach it from the host with `sklp dev forward app db:5432`
+  db:
+    image: postgis/postgis:16-3.4
+    network: bridge
+    port: 5432
+    env:
+      POSTGRES_PASSWORD: postgres
+
+  nats:
+    image: nats:2.10
+    network: bridge
+    command: [-js, -sd, /data]
+    volumes:
+      - natsdata:/data
+
+  # import: not in compose: detected from go.mod (has main package under cmd/)
+  # TODO(import): set port: to the port it listens on, so other services and the host browser can reach it; add depends_on for what it needs at boot (compose services: db, nats)
+  api:
+    run: go run ./cmd/server
+    workdir: .

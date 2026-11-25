@@ -10,3 +10,5 @@
 .sklp/logs/
 .sklp/run/
 !/space/embed/bin/placeholder
+!internal/importer/testdata/**/.env
+!internal/importer/testdata/**/.env.*
