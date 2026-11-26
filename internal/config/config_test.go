@@ -629,3 +629,24 @@ func TestMigrate_RoundTripRewritesFile(t *testing.T) {
 		t.Fatalf("context drifted: %+v vs %+v", again.Contexts["prod-node"], cfg.Contexts["prod-node"])
 	}
 }
+
+func TestResolveContext_VMGuestIgnoresTheWorkstationSelection(t *testing.T) {
+	withXDG(t)
+	cfg := &Config{
+		CurrentContext: "demo",
+		Contexts:       map[string]Context{"demo": {Server: "https://demo:6464"}},
+	}
+	t.Setenv(EnvVMGuest, "1")
+	t.Setenv(EnvContext, "")
+
+	if name, _, err := cfg.ResolveContext(""); err == nil {
+		t.Fatalf("a VM guest resolved the workstation's active context %q", name)
+	}
+	if name, c, err := cfg.ResolveContext("demo"); err != nil || name != "demo" || c.Server != "https://demo:6464" {
+		t.Fatalf("an explicit -context must still resolve in the guest: name=%q server=%q err=%v", name, c.Server, err)
+	}
+	t.Setenv(EnvContext, "demo")
+	if name, _, err := cfg.ResolveContext(""); err != nil || name != "demo" {
+		t.Fatalf("SKLP_CONTEXT must still resolve in the guest: name=%q err=%v", name, err)
+	}
+}
