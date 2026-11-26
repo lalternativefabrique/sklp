@@ -531,6 +531,24 @@ func TestApplyFromSourceUnresolvedVarIsRefused(t *testing.T) {
 	}
 }
 
+func TestApplyFromSourceWarnsAboutLiteralSecrets(t *testing.T) {
+	sup := &fakeSupervisor{live: map[string]spacemanager.Service{}, differs: map[string]bool{}}
+	c, cancel := serveFake(t, "app-production", sup)
+	defer cancel()
+
+	src := ApplySource{
+		Vars: map[string]string{"DB_PASS": "p4ss"},
+		YAML: "services:\n  web:\n    image: img:1\n    env:\n      API_TOKEN: inline\n      DB_PASSWORD: ${DB_PASS}\nspaces:\n  app-production: {}\n",
+	}
+	res, err := c.ApplySource(context.Background(), src, false)
+	if err != nil {
+		t.Fatalf("apply source: %v", err)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "API_TOKEN") || strings.Contains(res.Warnings[0], "DB_PASSWORD") {
+		t.Fatalf("warnings = %v, want only the literal API_TOKEN named", res.Warnings)
+	}
+}
+
 // TestApplyKeepsRolledImageWhenGitUnchanged: a manifest that still declares the
 // tag a service was first deployed with, while an image watch has since rolled
 // it further, keeps the rolled image and records the declaration.

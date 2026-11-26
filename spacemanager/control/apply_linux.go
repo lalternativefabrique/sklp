@@ -61,12 +61,14 @@ func handleApply(space string, sup Supervisor, body io.Reader) (ApplyResult, err
 		return ApplyResult{}, fmt.Errorf("decode request: %w", err)
 	}
 	var spec applySpec
+	var literalSecrets []string
 	if req.Source != nil {
 		services, meta, err := spacemanager.ResolveSource([]byte(req.Source.YAML), req.Source.Vars, space, req.Source.Stack)
 		if err != nil {
 			return ApplyResult{}, fmt.Errorf("resolve deploy source: %w", err)
 		}
 		spec = applySpec{Services: services, Meta: meta}
+		literalSecrets = spacemanager.SourceLiteralSecretKeys([]byte(req.Source.YAML), req.Source.Vars)
 	} else if err := json.Unmarshal(req.Spec, &spec); err != nil {
 		return ApplyResult{}, fmt.Errorf("decode spec: %w", err)
 	}
@@ -90,10 +92,14 @@ func handleApply(space string, sup Supervisor, body io.Reader) (ApplyResult, err
 	}
 	keepRolledImages(sup, spec.Services)
 	res, err := applyDesired(sup, spec.Services, spec.Meta)
-	if err == nil {
-		collectImagesAfterRoll()
+	if err != nil {
+		return res, err
 	}
-	return res, err
+	collectImagesAfterRoll()
+	if len(literalSecrets) > 0 {
+		res.Warnings = append(res.Warnings, spacemanager.LiteralSecretsWarning(literalSecrets))
+	}
+	return res, nil
 }
 
 // keepRolledImages merges an incoming manifest with what an image watch rolled
