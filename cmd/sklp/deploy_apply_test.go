@@ -19,3 +19,16 @@ func TestNormalizeDeployApply(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryDeploySubcommandIsASubverb(t *testing.T) {
+	for _, c := range deployCommand().Sub {
+		if !deploySubverbs[c.Name] {
+			t.Errorf("sklp deploy %s would be applied as a stack named %q", c.Name, c.Name)
+		}
+	}
+	for _, verb := range []string{"follow", "follows", "unfollow", "restores", "apply"} {
+		if got := normalizeDeployApply([]string{verb, "x"}); len(got) == 0 || (verb != "apply" && got[0] != verb) {
+			t.Errorf("normalizeDeployApply(%s x) = %v", verb, got)
+		}
+	}
+}

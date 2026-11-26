@@ -6,12 +6,19 @@ import (
 )
 
 // deploySubverbs are the tokens after `sklp deploy` that name a sub-verb; any
-// other leading non-flag token is a stack to apply.
-var deploySubverbs = map[string]bool{
-	"apply": true, "ls": true, "get": true, "logs": true, "exec": true, "restart": true,
-	"delete": true, "login": true, "context": true, "token": true, "fingerprint": true,
-	"mesh": true, "datastores": true, "restores": true, "agent": true, "__supervise": true,
-}
+// other leading non-flag token is a stack to apply. Read off the command tree,
+// so a new sub-verb is never mistaken for a stack; the two hidden ones the
+// tree does not list are added by hand.
+var deploySubverbs = func() map[string]bool {
+	m := map[string]bool{"agent": true, "__supervise": true}
+	for _, c := range deployCommand().Sub {
+		m[c.Name] = true
+		for _, a := range c.Aliases {
+			m[a] = true
+		}
+	}
+	return m
+}()
 
 // normalizeDeployApply turns `deploy apply <stack> …` into the bare form the
 // transport shims and the façade already understand, and points a bare
