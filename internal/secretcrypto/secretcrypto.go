@@ -88,6 +88,26 @@ func NewCipherFromPassphrase(passphrase string, salt []byte, iters int) (*Cipher
 
 // Encrypt seals plaintext. Output layout: nonce || ciphertext so a single field
 // stores the blob without a separate nonce column. (Copied from core.)
+// KeyLen is the size of a raw key NewCipherFromKey accepts (AES-256).
+const KeyLen = 32
+
+// NewCipherFromKey builds a cipher from a random key a machine keeps for
+// itself, where there is no operator passphrase to derive one from.
+func NewCipherFromKey(key []byte) (*Cipher, error) {
+	if len(key) != KeyLen {
+		return nil, fmt.Errorf("key must be %d bytes, got %d", KeyLen, len(key))
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("init aes: %w", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("init gcm: %w", err)
+	}
+	return &Cipher{aead: aead}, nil
+}
+
 func (c *Cipher) Encrypt(plaintext string) ([]byte, error) {
 	nonce := make([]byte, c.aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
