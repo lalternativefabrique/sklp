@@ -257,25 +257,29 @@ type Options struct {
 // zero-downtime on a spec change. One Agent owns one set of services for the
 // lifetime of Run.
 type Agent struct {
-	backups     backupLog
-	launcher    Launcher
-	watcher     DeathWatcher
-	wakeCh      chan struct{} // internal wake signal for eventLoop
-	ready       readyChecker
-	proxy       proxyController
-	gateway     Gateway                                    // host-level front door for domained services; nil when unwired
-	meshResolve func(space, service string) (string, bool) // mesh route target -> hosting node's mesh IP; nil = never resolves
-	meshRouted  map[string]string                          // mesh route key -> last declared backend+routes stamp
-	ingress     ingressController                          // host->space port ingress; nil when unsupported
-	gwback      gatewayBackender                           // host-reachable backend for domained services; nil when unsupported
-	l7          l7Router                                   // native in-worker L7 ingress route push; nil when unsupported
-	ipPort      ipPortProvider                             // per-instance container IP+port; nil when unsupported
-	connCounter func(inst *instance) (int, bool)           // established connections to an instance; nil when unobservable
-	acl         aclApplier                                 // east-west forward-chain ACL push; nil when unsupported
-	opts        Options
-	logger      *log.Logger
-	observe     StateObserver
-	logs        *logStreamer // streams container stdout/stderr; no-op when unwired
+	backups  backupLog
+	launcher Launcher
+	// pendingStops holds, per instance id, the asynchronous Stop still tearing
+	// that id down. A relaunch reuses the id, and the launcher keys per-run
+	// resources (the overlay holder runc enters) by it.
+	pendingStops map[string]chan struct{}
+	watcher      DeathWatcher
+	wakeCh       chan struct{} // internal wake signal for eventLoop
+	ready        readyChecker
+	proxy        proxyController
+	gateway      Gateway                                    // host-level front door for domained services; nil when unwired
+	meshResolve  func(space, service string) (string, bool) // mesh route target -> hosting node's mesh IP; nil = never resolves
+	meshRouted   map[string]string                          // mesh route key -> last declared backend+routes stamp
+	ingress      ingressController                          // host->space port ingress; nil when unsupported
+	gwback       gatewayBackender                           // host-reachable backend for domained services; nil when unsupported
+	l7           l7Router                                   // native in-worker L7 ingress route push; nil when unsupported
+	ipPort       ipPortProvider                             // per-instance container IP+port; nil when unsupported
+	connCounter  func(inst *instance) (int, bool)           // established connections to an instance; nil when unobservable
+	acl          aclApplier                                 // east-west forward-chain ACL push; nil when unsupported
+	opts         Options
+	logger       *log.Logger
+	observe      StateObserver
+	logs         *logStreamer // streams container stdout/stderr; no-op when unwired
 
 	// mappings is the parsed host:container port set per service, derived once
 	// from Service.Ports at construction. ingressUp guards OpenIngress to a
@@ -1060,7 +1064,11 @@ func (a *Agent) newInstanceLocked(svcName string, spec Service, id string) *inst
 // failure schedules a backed-off retry rather than aborting the agent.
 func (a *Agent) launch(ctx context.Context, svc Service) {
 	id := svc.Name
-	pid, err := a.launcher.Start(ctx, svc)
+	err := a.waitPendingStop(ctx, id)
+	var pid int
+	if err == nil {
+		pid, err = a.launcher.Start(ctx, svc)
+	}
 	if err != nil {
 		a.mu.Lock()
 		if inst := a.instances[id]; inst != nil {
@@ -1286,7 +1294,45 @@ func (a *Agent) recycleLocked(inst *instance) {
 	delay := inst.bo.next()
 	inst.restartAt = time.Now().Add(delay)
 	a.transition(inst, Restarting, "restart in "+delay.String())
-	go a.launcher.Stop(id)
+	a.stopAsyncLocked(id)
+}
+
+// stopAsyncLocked tears id down off the lock and records the teardown, so a
+// launch of the same id waits for it. Caller holds a.mu.
+func (a *Agent) stopAsyncLocked(id string) {
+	if a.pendingStops == nil {
+		a.pendingStops = map[string]chan struct{}{}
+	}
+	prev := a.pendingStops[id]
+	done := make(chan struct{})
+	a.pendingStops[id] = done
+	go func() {
+		if prev != nil {
+			<-prev
+		}
+		a.launcher.Stop(id)
+		a.mu.Lock()
+		if a.pendingStops[id] == done {
+			delete(a.pendingStops, id)
+		}
+		a.mu.Unlock()
+		close(done)
+	}()
+}
+
+func (a *Agent) waitPendingStop(ctx context.Context, id string) error {
+	a.mu.Lock()
+	pending := a.pendingStops[id]
+	a.mu.Unlock()
+	if pending == nil {
+		return nil
+	}
+	select {
+	case <-pending:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // syncProxyLocked recomputes the Ready backend address set for a service and
@@ -2257,7 +2303,7 @@ func (a *Agent) stopInstanceLocked(inst *instance) {
 	// Mark it, or an operator's bounce reads as a crash.
 	inst.bounced = true
 	a.logs.stop(id)
-	go a.launcher.Stop(id)
+	a.stopAsyncLocked(id)
 }
 
 // teardown stops every managed container.
