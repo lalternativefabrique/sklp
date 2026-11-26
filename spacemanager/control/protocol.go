@@ -154,6 +154,20 @@ type FollowRequest struct {
 	Name   string `json:"name,omitempty"`
 }
 
+// FollowEntry is one repo a node follows.
+type FollowEntry struct {
+	Name    string    `json:"name"`
+	Repo    string    `json:"repo"`
+	Branch  string    `json:"branch"`
+	AddedAt time.Time `json:"added_at"`
+}
+
+// FollowsResponse is the GET RouteFollows answer.
+type FollowsResponse struct {
+	Node    string        `json:"node"`
+	Follows []FollowEntry `json:"follows"`
+}
+
 // SpaceRoutePrefix returns the "/v1/spaces/<space>" path prefix a multi-space
 // network node (ServeNetMulti) dispatches on: every space-scoped route
 // (RouteApply, RouteState, RouteLogs, ...) is served there instead of at its
