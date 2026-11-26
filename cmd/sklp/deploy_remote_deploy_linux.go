@@ -1,25 +1,22 @@
 // deploy_remote_deploy.go routes a PLAIN `sklp deploy [stack]` to the right
 // transport, kubectl-style: the ACTIVE context (config `current_context`, or
-// --context) decides. A context with a Server reconciles the manifest against
-// that remote supervisor over the network (deployer.RemoteApply — the manifest is
-// read LOCALLY and POSTed, nothing is copied to the server); an explicit --local,
-// or no server resolved at all, falls through to the local socket flow.
-//
-// This is the deploy-verb counterpart of deploy_remote_net.go (which handles the
-// read/control sub-verbs). Non-gated: the manifest resolution + network client
-// need no embedded runtime; only the SERVER does.
+// --context) decides. A context with a Server sends the raw deploy.yaml and the
+// ${VAR} values it references; the node resolves and applies it, the same way
+// it does for a manifest the core pushes. An explicit --local, or no server
+// resolved at all, falls through to the local socket flow.
 package main
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/lalternativefabrique/sklp/internal/config"
 	"github.com/lalternativefabrique/sklp/internal/layout"
 	"github.com/lalternativefabrique/sklp/spacemanager/control"
-	"github.com/lalternativefabrique/sklp/spacemanager/deployer"
+	"github.com/lalternativefabrique/sklp/spacemanager/deployvars"
 )
 
 // maybeRunRemoteDeploy inspects a plain `sklp deploy` invocation (no read/control
@@ -211,8 +208,7 @@ func runRemoteDeploy(dp deployTransport) int {
 		return 2
 	}
 	fmt.Fprintf(os.Stderr, "sklp deploy: applying %s to %s (space %s)\n", dp.stack, describeTarget(dp), dp.space)
-	// Must run BEFORE spacemanager.Load (inside RemoteApply) resolves ${VAR}:
-	// this sets the process env a project_id: secret needs to be visible for.
+	// Before the other sources: a project secret outranks env_files and config.yaml.
 	loadProjectSecretsIntoEnv(path)
 
 	var opts []control.DialOption
@@ -229,18 +225,42 @@ func runRemoteDeploy(dp deployTransport) int {
 	}
 	client = client.WithSpace(dp.space)
 
-	err = deployer.RemoteApply(context.Background(), client, deployer.RemoteApplyConfig{
-		Stack: dp.stack,
-		File:  path,
-		Space: dp.space,
-		Repo:  dp.repo,
-		Force: dp.force,
-	}, os.Stdout)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		reportNetErr("sklp deploy", dp.space, err)
+		fmt.Fprintf(os.Stderr, "sklp deploy: read deploy file: %v\n", err)
 		return 1
 	}
+	if err := deployvars.LoadSources(path, raw); err != nil {
+		fmt.Fprintf(os.Stderr, "sklp deploy: %v\n", err)
+		return 1
+	}
+	vars, err := deployvars.Collect(raw, os.LookupEnv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sklp deploy: %v\n", err)
+		return 1
+	}
+	res, err := client.ApplySource(context.Background(), control.ApplySource{YAML: string(raw), Vars: vars, Stack: dp.stack}, dp.force)
+	if err != nil {
+		reportNetErr("sklp deploy", dp.space, fmt.Errorf("apply to remote supervisor for space %q: %w", dp.space, err))
+		return 1
+	}
+	printRemoteApplyResult(os.Stdout, dp.space, res)
 	return 0
+}
+
+func printRemoteApplyResult(out io.Writer, space string, res control.ApplyResult) {
+	switch res.Result {
+	case control.ResultUnchanged:
+		fmt.Fprintf(out, "space %q: unchanged\n", space)
+	default:
+		fmt.Fprintf(out, "space %q: %s (%d change(s))\n", space, res.Result, len(res.Changes))
+		for _, c := range res.Changes {
+			fmt.Fprintf(out, "  - %s\n", c)
+		}
+	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(out, "  ! %s\n", w)
+	}
 }
 
 func describeTarget(dp deployTransport) string {

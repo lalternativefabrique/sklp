@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/lalternativefabrique/sklp/spacemanager"
 	"github.com/lalternativefabrique/sklp/spacemanager/control"
@@ -149,7 +148,5 @@ func warnLiteralSecrets(cfg *spacemanager.DeployConfig, errOut writer) {
 	if len(keys) == 0 {
 		return
 	}
-	fmt.Fprintf(errOut, "sklp deploy: warning: %s written as literal value(s) in the deploy file; "+
-		"they are stored in cleartext in the manifest. Use ${VAR} to keep them out of it.\n",
-		strings.Join(keys, ", "))
+	fmt.Fprintf(errOut, "sklp deploy: warning: %s\n", spacemanager.LiteralSecretsWarning(keys))
 }

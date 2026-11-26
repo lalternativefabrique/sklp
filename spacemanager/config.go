@@ -1,10 +1,7 @@
 package spacemanager
 
 import (
-	"bufio"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -13,9 +10,9 @@ import (
 	"time"
 
 	"github.com/lalternativefabrique/sklp/ingress"
-	"github.com/lalternativefabrique/sklp/internal/stackconfig"
 	"github.com/lalternativefabrique/sklp/internal/xdg"
 	"github.com/lalternativefabrique/sklp/space"
+	"github.com/lalternativefabrique/sklp/spacemanager/deployvars"
 	"gopkg.in/yaml.v3"
 )
 
@@ -598,19 +595,19 @@ func Load(path string) (*DeployConfig, error) {
 	// having to `source .env`. Relative paths resolve against the REPO ROOT (the
 	// dir holding .sklp/), so the conventional `env_files: [.env]` finds the
 	// .env at the repo root — not next to the deploy file two levels down.
-	files, ferr := rawEnvFiles(raw)
+	files, ferr := deployvars.EnvFiles(raw)
 	if ferr != nil {
 		return nil, ferr
 	}
-	base := deployRepoRoot(path)
-	if err := loadDeployEnvFiles(files, base); err != nil {
+	base := deployvars.RepoRoot(path)
+	if err := deployvars.LoadEnvFiles(files, base); err != nil {
 		return nil, err
 	}
 	// Load the Pulumi-style config.yaml files (plain values + secure: secrets
 	// decrypted with SKLP_SECRETS_PASSPHRASE) into the process env, so ${VAR} in
 	// the deploy file resolves from them — the committable, encrypted alternative
 	// to a gitignored .env. Host env still wins, matching env_files semantics.
-	if err := loadStackConfigs(base, filepath.Dir(path)); err != nil {
+	if err := deployvars.LoadStackConfigs(base, filepath.Dir(path)); err != nil {
 		return nil, err
 	}
 	cfg, err := Parse(raw)
@@ -628,160 +625,13 @@ func Load(path string) (*DeployConfig, error) {
 	return cfg, nil
 }
 
-// deployRepoRoot resolves the repo root for a deploy file path. A deploy file
-// normally lives at <root>/.sklp/<stack>/deploy.yaml, so the root is the dir
-// containing the .sklp segment. Falls back to the deploy file's own dir for a
-// path that isn't under a .sklp/ tree (e.g. an explicit -file elsewhere), which
-// preserves the prior behaviour for that case.
-func deployRepoRoot(path string) string {
-	dir := filepath.Dir(path)
-	// Walk up to the parent of the nearest ".sklp" segment.
-	for d := dir; ; {
-		if filepath.Base(d) == ".sklp" {
-			return filepath.Dir(d)
-		}
-		parent := filepath.Dir(d)
-		if parent == d {
-			break // reached filesystem root, no .sklp found
-		}
-		d = parent
-	}
-	return dir
-}
-
-// rawEnvFiles extracts the env_files list from the un-expanded YAML, before
-// ${VAR} expansion (env_files paths must not themselves depend on the env they
-// load). Mirrors registryPasswordEnvs' raw pre-pass.
-func rawEnvFiles(raw []byte) ([]string, error) {
-	var probe struct {
-		EnvFiles []string `yaml:"env_files"`
-	}
-	if err := yaml.Unmarshal(raw, &probe); err != nil {
-		return nil, fmt.Errorf("parse deploy file (env_files): %w", err)
-	}
-	return probe.EnvFiles, nil
-}
-
-// loadDeployEnvFiles parses each dotenv file (relative to baseDir) and sets any
-// key NOT already in the process env (host-wins). Missing files are skipped so
-// an optional .env.local is harmless. Values are never logged.
-func loadDeployEnvFiles(paths []string, baseDir string) error {
-	for _, p := range paths {
-		abs := p
-		if !filepath.IsAbs(abs) {
-			abs = filepath.Join(baseDir, p)
-		}
-		f, err := os.Open(abs)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return fmt.Errorf("env_files: open %s: %w", p, err)
-		}
-		sc := bufio.NewScanner(f)
-		for sc.Scan() {
-			line := strings.TrimSpace(sc.Text())
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			line = strings.TrimPrefix(line, "export ")
-			k, v, ok := strings.Cut(line, "=")
-			if !ok {
-				continue
-			}
-			k = strings.TrimSpace(k)
-			v = strings.Trim(strings.TrimSpace(v), `"'`)
-			if k == "" {
-				continue
-			}
-			if _, exists := os.LookupEnv(k); exists {
-				continue // host env wins
-			}
-			if err := os.Setenv(k, v); err != nil {
-				f.Close()
-				return fmt.Errorf("env_files: setenv %s: %w", k, err)
-			}
-		}
-		cerr := sc.Err()
-		f.Close()
-		if cerr != nil {
-			return fmt.Errorf("env_files: scan %s: %w", p, cerr)
-		}
-	}
-	return nil
-}
-
-// loadStackConfigs loads the repo-wide config.yaml then the stack's own, so a
-// value shared by every stack is stored once at .sklp/config.yaml instead of
-// being copied into each .sklp/<stack>/config.yaml. The order matches the CI
-// loader (pipeline.stackConfigPaths): repo-wide first, the stack file second so
-// it can specialise a shared value.
-//
-// A name the operator exported still wins over both, so the snapshot is taken
-// before any injection: once the repo-wide file has Setenv'd a key, os.LookupEnv
-// can no longer tell an operator export from this loader's own write, and the
-// stack file could never override anything.
-func loadStackConfigs(repoRoot, stackDir string) error {
-	fromHost := make(map[string]bool, len(os.Environ()))
-	for _, kv := range os.Environ() {
-		if i := strings.IndexByte(kv, '='); i > 0 {
-			fromHost[kv[:i]] = true
-		}
-	}
-	paths := []string{filepath.Join(repoRoot, ".sklp", "config.yaml")}
-	if stackConfig := filepath.Join(stackDir, "config.yaml"); stackConfig != paths[0] {
-		paths = append(paths, stackConfig)
-	}
-	for _, path := range paths {
-		if err := loadStackConfig(path, repoRoot, fromHost); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// loadStackConfig loads one config.yaml (plain values + secure: secrets
-// decrypted with SKLP_SECRETS_PASSPHRASE) into the process env, so a later
-// expandVars resolves ${VAR} from it. A name in fromHost is left untouched,
-// like env_files. A missing file is a no-op; a wrong/absent passphrase for a
-// file WITH secrets is a hard error (naming the offending key) so a deploy
-// never silently drops a secret. Injected values are cleared from the deploy
-// path's perspective by nothing — they persist in the process env, matching
-// env_files behaviour, which is what the remote-apply resolution reads.
-func loadStackConfig(path, repoRoot string, fromHost map[string]bool) error {
-	c, err := stackconfig.Load(path)
-	if err != nil {
-		return fmt.Errorf("stack config: %w", err)
-	}
-	if len(c.Keys()) == 0 {
-		return nil
-	}
-	pp, _, perr := stackconfig.ResolvePassphrase(repoRoot)
-	if perr != nil {
-		return fmt.Errorf("stack config %s: %w", path, perr)
-	}
-	resolved, err := c.Resolve(pp)
-	if err != nil {
-		return fmt.Errorf("stack config %s: %w", path, err)
-	}
-	for k, v := range resolved {
-		if fromHost[k] {
-			continue
-		}
-		if err := os.Setenv(k, v); err != nil {
-			return fmt.Errorf("stack config: setenv %s: %w", k, err)
-		}
-	}
-	return nil
-}
-
 // Parse parses deploy.yaml bytes: ${VAR} substitution, decode, validate.
 func ParseWith(raw []byte, lookup func(string) (string, bool)) (*DeployConfig, error) {
 	// Capture the registry password VAR NAMES from the raw (un-expanded) YAML
 	// BEFORE expandVars rewrites them to values, so the secret stays late-bound:
 	// the manifest persists the var name, and the password is resolved from the
 	// environment only at launch. Everything else is expanded normally.
-	rawPwEnv, err := registryPasswordEnvs(raw)
+	rawPwEnv, err := deployvars.RegistryPasswordVars(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -793,7 +643,7 @@ func ParseWith(raw []byte, lookup func(string) (string, bool)) (*DeployConfig, e
 		return nil, err
 	}
 
-	lookup = LoginFileLookup(hostByPasswordVar(rawPwEnv), lookup)
+	lookup = deployvars.LoginFileLookup(deployvars.HostByPasswordVar(rawPwEnv), lookup)
 	expanded, err := expandVarsWith(string(raw), lookup)
 	if err != nil {
 		return nil, err
@@ -844,29 +694,6 @@ func Parse(raw []byte) (*DeployConfig, error) {
 		_ = os.Unsetenv(ingress.EnvACME)
 	}
 	return cfg, nil
-}
-
-// registryPasswordEnvs parses the raw YAML to extract, per registry host, the
-// env var name its password references (the ${VAR} form). Used to keep the
-// secret late-bound: only the var name is persisted, never the value. A password
-// that is not a single ${VAR} (e.g. a literal) yields "" for that host, which
-// the launch resolver treats as a cleartext password carried in-memory only.
-func registryPasswordEnvs(raw []byte) (map[string]string, error) {
-	var probe struct {
-		Registries map[string]struct {
-			Password string `yaml:"password"`
-		} `yaml:"registries"`
-	}
-	if err := yaml.Unmarshal(raw, &probe); err != nil {
-		return nil, fmt.Errorf("parse deploy file (registries): %w", err)
-	}
-	out := map[string]string{}
-	for host, r := range probe.Registries {
-		if m := bracedVar.FindStringSubmatch(r.Password); m != nil && r.Password == m[0] {
-			out[host] = r.Password[2 : len(r.Password)-1] // strip ${ }
-		}
-	}
-	return out, nil
 }
 
 // rejectGatewayMode fails a deploy.yaml that still declares `gateway.mode`.
@@ -948,7 +775,7 @@ const spacePlaceholder = "SPACE"
 // bracedVar matches ONLY the ${VAR} form (braces required). A bare $VAR / $? /
 // $2 / $(...) is left untouched so a service `command` that legitimately carries
 // shell syntax passes through verbatim to the container's shell.
-var bracedVar = regexp.MustCompile(`\$\{[A-Za-z_][A-Za-z0-9_]*\}`)
+var bracedVar = deployvars.BracedVar
 
 // expandVars resolves ${VAR} from the process environment. A missing variable
 // is a hard error (deploy secrets must not silently fall back to empty), with
@@ -1675,7 +1502,7 @@ func (c *DeployConfig) findCycle() string {
 // ("postgres://app:${PW}@db/app"). The result maps the env KEY to that raw
 // template, so the resolved value is never persisted in cleartext: the manifest
 // keeps the template and ExpandTemplate rebuilds the value at launch from the
-// space's secrets — the same late binding registryPasswordEnvs applies to
+// space's secrets — the same late binding deployvars.RegistryPasswordVars applies to
 // registry passwords. A value whose only reference is ${SPACE} is not a secret
 // and stays a literal.
 func envVarRefs(raw []byte) (map[string]string, error) {
