@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/lalternativefabrique/sklp/internal/xdg"
@@ -139,9 +140,9 @@ func readState(repoAbs, stack string) (*runState, error) {
 
 // runningStates returns every run recorded for repoAbs, whatever its stack.
 // The statefile name is a hash, so the repo and stack are read back from the
-// record itself; a pre-stack record (no Repo) is still found through the
-// legacy unscoped key.
-func runningStates(repoAbs string) ([]runState, error) {
+// record itself. A record written before it carried them is found only by
+// probing its key: the unscoped one, and each of the stacks given.
+func runningStates(repoAbs string, stacks []string) ([]runState, error) {
 	paths, err := filepath.Glob(filepath.Join(stateDir(), "dev-*.json"))
 	if err != nil {
 		return nil, err
@@ -157,6 +158,15 @@ func runningStates(repoAbs string) ([]runState, error) {
 			continue
 		}
 		out = append(out, st)
+	}
+	for _, stack := range stacks {
+		if slices.ContainsFunc(out, func(st runState) bool { return st.Stack == stack }) {
+			continue
+		}
+		if st, err := readState(repoAbs, stack); err == nil && st != nil && st.Repo == "" {
+			st.Repo, st.Stack = repoAbs, stack
+			out = append(out, *st)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Stack < out[j].Stack })
 	if legacy, err := readState(repoAbs, ""); err == nil && legacy != nil && legacy.Repo == "" {

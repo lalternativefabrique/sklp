@@ -17,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/lalternativefabrique/sklp/internal/layout"
 )
 
 // RunDown is the `sklp dev down [<stack>]` entrypoint. Returns an exit code so
@@ -41,7 +43,8 @@ func RunDown(args []string) int {
 		return 2
 	}
 
-	running, err := runningStates(repoAbs)
+	declared, _ := layout.New(repoAbs).StacksFor("dev")
+	running, err := runningStates(repoAbs, append(declared, positionals...))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sklp dev down: %v\n", err)
 		return 1

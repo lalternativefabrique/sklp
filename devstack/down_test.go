@@ -100,7 +100,7 @@ func TestRunningStates_FindsEveryStackOfTheRepo(t *testing.T) {
 		}
 	}
 
-	got, err := runningStates(repo)
+	got, err := runningStates(repo, nil)
 	if err != nil {
 		t.Fatalf("runningStates: %v", err)
 	}
@@ -136,5 +136,21 @@ func TestPickDownTarget(t *testing.T) {
 				t.Fatalf("got (%q, %d), want (%q, %d)", got, code, tc.want, tc.wantCode)
 			}
 		})
+	}
+}
+
+func TestRunningStates_FindsARecordWithoutRepo(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	repo := t.TempDir()
+	if err := writeState(repo, "messag", runState{SupervisorPID: 1, Embedded: true}); err != nil {
+		t.Fatalf("writeState: %v", err)
+	}
+
+	got, err := runningStates(repo, []string{"messag", "web"})
+	if err != nil {
+		t.Fatalf("runningStates: %v", err)
+	}
+	if len(got) != 1 || got[0].Stack != "messag" || got[0].Repo != repo {
+		t.Fatalf("want the messag record, got %+v", got)
 	}
 }
