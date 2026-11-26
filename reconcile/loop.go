@@ -57,10 +57,14 @@ type Loop struct {
 	source      TargetSource
 	reconcilers []Reconciler
 	interval    time.Duration
+	resync      time.Duration
 	log         *slog.Logger
 
-	mu   sync.Mutex
-	seen map[string]string // repo -> last reconciled ref
+	// passMu serialises passes: a pass kicked off by a new follow must not
+	// apply the same repo alongside one the ticker started.
+	passMu sync.Mutex
+	mu     sync.Mutex
+	seen   map[string]string // repo -> last reconciled ref
 }
 
 // Options configure a Loop.
@@ -69,7 +73,12 @@ type Options struct {
 	// within a minute, which is the latency the pull model trades for not
 	// needing an inbound path.
 	Interval time.Duration
-	Logger   *slog.Logger
+	// Resync, when set, forgets every reconciled ref that often, so each repo
+	// is applied again with no new commit. An apply the node refused (it was
+	// still bringing the space up) or a node that drifted converges then
+	// instead of waiting for the next push.
+	Resync time.Duration
+	Logger *slog.Logger
 }
 
 func NewLoop(targets []Target, reconcilers []Reconciler, opts Options) *Loop {
@@ -85,6 +94,7 @@ func NewLoop(targets []Target, reconcilers []Reconciler, opts Options) *Loop {
 		targets:     targets,
 		reconcilers: reconcilers,
 		interval:    interval,
+		resync:      opts.Resync,
 		log:         log,
 		seen:        map[string]string{},
 	}
@@ -107,10 +117,19 @@ func (l *Loop) Run(ctx context.Context) error {
 
 	ticker := time.NewTicker(l.interval)
 	defer ticker.Stop()
+	var resync <-chan time.Time
+	if l.resync > 0 {
+		t := time.NewTicker(l.resync)
+		defer t.Stop()
+		resync = t.C
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-resync:
+			l.forgetAllBut(nil)
+			l.Pass(ctx)
 		case <-ticker.C:
 			l.Pass(ctx)
 		}
@@ -123,6 +142,8 @@ func (l *Loop) Run(ctx context.Context) error {
 // One target's failure does not stop the others: a repo whose credentials
 // expired must not keep the rest of this node's spaces from reconciling.
 func (l *Loop) Pass(ctx context.Context) {
+	l.passMu.Lock()
+	defer l.passMu.Unlock()
 	targets := l.targets
 	if l.source != nil {
 		targets = l.source.Targets(ctx)

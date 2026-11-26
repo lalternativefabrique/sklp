@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/lalternativefabrique/sklp/reconcile"
 	"github.com/lalternativefabrique/sklp/reconcile/imageupdate/rolling"
@@ -17,6 +18,10 @@ import (
 
 // credentialSpace picks the file the host-wide control credentials live in.
 const credentialSpace = "production"
+
+// resyncEvery re-applies every followed repo with no new commit, the node-side
+// counterpart of the core's converge watcher.
+const resyncEvery = 5 * time.Minute
 
 // nodeReconcile runs the node's own reconcile inside the agent: the repos it
 // follows, the deploys they declare and the image watches they ask for. It
@@ -93,7 +98,7 @@ func (n *nodeReconcile) ensure() error {
 	}
 	ctx, cancel := context.WithCancel(n.agentCtx)
 	loop := reconcile.NewTargetLoop(reconcile.NewRunner(stores, node, cfg.Targets, reconcile.CacheRoot(), n.log),
-		reconcile.Options{Interval: cfg.Interval, Logger: n.log})
+		reconcile.Options{Interval: cfg.Interval, Resync: resyncEvery, Logger: n.log})
 	go func() { _ = loop.Run(ctx) }()
 	n.embedded, n.stores, n.loop, n.cancel = embedded, stores, loop, cancel
 	n.poller = reconcile.StartImageRolling(ctx, stores, 0, node)

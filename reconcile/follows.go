@@ -46,12 +46,14 @@ func NormalizeFollow(f Follow) (Follow, error) {
 	switch {
 	case filepath.IsAbs(f.Repo):
 	case strings.HasPrefix(f.Repo, "https://"):
+		// Checked before anything echoes the URL back: a token is commonly
+		// written as the user part, which url.Redacted leaves in clear.
+		if authority, _, _ := strings.Cut(strings.TrimPrefix(f.Repo, "https://"), "/"); strings.Contains(authority, "@") {
+			return Follow{}, errors.New("repo carries a credential; only public repos can be followed this way")
+		}
 		u, err := url.Parse(f.Repo)
 		if err != nil || u.Host == "" || strings.Trim(u.Path, "/") == "" {
 			return Follow{}, fmt.Errorf("repo %q is not a clone URL", f.Repo)
-		}
-		if u.User != nil {
-			return Follow{}, fmt.Errorf("repo %q carries a credential; only public repos can be followed this way", u.Redacted())
 		}
 	default:
 		return Follow{}, fmt.Errorf("repo %q must be an https:// clone URL", f.Repo)
