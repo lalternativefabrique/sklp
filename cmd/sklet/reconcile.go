@@ -85,7 +85,12 @@ func reconcileCommand() cli.Command {
 			}
 			defer nc.Close()
 
-			stores, err := reconcile.OpenStores(ctx, js, nil)
+			sealer, err := reconcile.LoadSealer(reconcile.KeyPath())
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
+				return 1
+			}
+			stores, err := reconcile.OpenStores(ctx, js, sealer)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
 				return 1
