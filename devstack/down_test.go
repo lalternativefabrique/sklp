@@ -88,3 +88,53 @@ func TestStopState_KillsProcessGroup(t *testing.T) {
 		}
 	}
 }
+
+func TestRunningStates_FindsEveryStackOfTheRepo(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	repo := t.TempDir()
+	other := t.TempDir()
+	for _, w := range []struct{ repo, stack string }{{repo, "web"}, {repo, "messag"}, {other, "messag"}} {
+		st := runState{SupervisorPID: 1, Embedded: true, EmbeddedSpace: devSpaceName(w.repo, w.stack), Repo: w.repo, Stack: w.stack}
+		if err := writeState(w.repo, w.stack, st); err != nil {
+			t.Fatalf("writeState: %v", err)
+		}
+	}
+
+	got, err := runningStates(repo)
+	if err != nil {
+		t.Fatalf("runningStates: %v", err)
+	}
+	if len(got) != 2 || got[0].Stack != "messag" || got[1].Stack != "web" {
+		t.Fatalf("want messag+web of this repo only, got %+v", got)
+	}
+}
+
+func TestPickDownTarget(t *testing.T) {
+	messag := runState{Stack: "messag"}
+	web := runState{Stack: "web"}
+	cases := []struct {
+		name        string
+		running     []runState
+		positionals []string
+		want        string
+		wantCode    int
+	}{
+		{"named and running", []runState{messag, web}, []string{"messag"}, "messag", 0},
+		{"named but not running", []runState{web}, []string{"messag"}, "", 0},
+		{"unnamed single", []runState{messag}, nil, "messag", 0},
+		{"unnamed none", nil, nil, "", 0},
+		{"unnamed ambiguous", []runState{messag, web}, nil, "", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st, code := pickDownTarget(tc.running, tc.positionals)
+			got := ""
+			if st != nil {
+				got = st.Stack
+			}
+			if got != tc.want || code != tc.wantCode {
+				t.Fatalf("got (%q, %d), want (%q, %d)", got, code, tc.want, tc.wantCode)
+			}
+		})
+	}
+}

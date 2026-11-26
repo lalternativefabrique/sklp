@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/lalternativefabrique/sklp/internal/xdg"
 )
@@ -63,6 +64,9 @@ type runState struct {
 	// EmbeddedSpace is the space name the embedded run used, so a dead-
 	// supervisor down can reap that space's containers + bridge.
 	EmbeddedSpace string `json:"embedded_space,omitempty"`
+
+	Repo  string `json:"repo,omitempty"`
+	Stack string `json:"stack,omitempty"`
 }
 
 // stateDir is the per-user dev run-state dir, ~/.cache/sklp/dev. It is
@@ -131,6 +135,34 @@ func readState(repoAbs, stack string) (*runState, error) {
 		return nil, fmt.Errorf("parse %s: %w", statePath(repoAbs, stack), err)
 	}
 	return &st, nil
+}
+
+// runningStates returns every run recorded for repoAbs, whatever its stack.
+// The statefile name is a hash, so the repo and stack are read back from the
+// record itself; a pre-stack record (no Repo) is still found through the
+// legacy unscoped key.
+func runningStates(repoAbs string) ([]runState, error) {
+	paths, err := filepath.Glob(filepath.Join(stateDir(), "dev-*.json"))
+	if err != nil {
+		return nil, err
+	}
+	var out []runState
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var st runState
+		if json.Unmarshal(data, &st) != nil || st.Repo != repoAbs {
+			continue
+		}
+		out = append(out, st)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Stack < out[j].Stack })
+	if legacy, err := readState(repoAbs, ""); err == nil && legacy != nil && legacy.Repo == "" {
+		out = append(out, *legacy)
+	}
+	return out, nil
 }
 
 // removeState deletes the statefile. Idempotent: a missing file is

@@ -100,7 +100,7 @@ func embeddedRun(
 		// (and a Log readiness probe) see the live output, prefixed by service.
 		bcast := es.tail(ctx, ns.Name, printer)
 
-		if err := writeState(repoAbs, stackName, es.snapshot(os.Getpid(), space)); err != nil {
+		if err := writeState(repoAbs, stackName, es.snapshot(os.Getpid(), repoAbs, stackName, space)); err != nil {
 			printer.Banner("warning: could not write dev run-state: %v", err)
 		}
 
@@ -225,8 +225,8 @@ func (s *embeddedState) tail(ctx context.Context, name string, printer *logPrint
 // snapshot builds the runState an embedded run leaves for `sklp dev down`. The
 // space name lets a dead-supervisor down reap orphaned containers; no pgids /
 // OCI names are recorded (the runc launcher owns the containers).
-func (s *embeddedState) snapshot(supervisorPID int, space string) runState {
-	return runState{SupervisorPID: supervisorPID, Embedded: true, EmbeddedSpace: space}
+func (s *embeddedState) snapshot(supervisorPID int, repoAbs, stack, space string) runState {
+	return runState{SupervisorPID: supervisorPID, Embedded: true, EmbeddedSpace: space, Repo: repoAbs, Stack: stack}
 }
 
 // stopAll stops every launched service at once and reports each one as it
