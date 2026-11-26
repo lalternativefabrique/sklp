@@ -236,11 +236,7 @@ func deleteAck(space string, volumes bool) string {
 // predates the Stack field (empty). Kept here for the client-side guards that
 // report on a locally-visible space.
 func liveSpaceOwner(space string) (stack string, ok bool) {
-	_, meta, err := control.LoadManifest(space)
-	if err != nil || meta.Stack == "" {
-		return "", false
-	}
-	return meta.Stack, true
+	return localSpaceOwner(space)
 }
 
 // errStackUnknown is returned by the client paths when a stack positional does

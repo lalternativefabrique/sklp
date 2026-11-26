@@ -27,7 +27,7 @@ func deployTokenCommand() cli.Command {
 		Short: "Print the space's network Bearer token",
 		Flags: []cli.Flag{{Name: "space", Type: cli.StringFlag, StringDefault: "production", Usage: "space whose token to print"}},
 		Run: func(ctx context.Context, args cli.Args) int {
-			tok, err := control.EnsureToken(args.String("space"))
+			tok, err := localSpaceToken(args.String("space"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "sklp deploy token:", err)
 				return 1
@@ -102,7 +102,7 @@ func deployFingerprintCommand() cli.Command {
 		Short: "Print the space's TLS cert fingerprint",
 		Flags: []cli.Flag{{Name: "space", Type: cli.StringFlag, StringDefault: "production", Usage: "space whose cert fingerprint to print"}},
 		Run: func(ctx context.Context, args cli.Args) int {
-			_, fp, err := control.EnsureServerCert(args.String("space"))
+			fp, err := localSpaceFingerprint(args.String("space"))
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "sklp deploy fingerprint:", err)
 				return 1

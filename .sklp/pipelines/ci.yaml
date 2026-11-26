@@ -59,3 +59,14 @@ steps:
       CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -buildvcs=false -o bin/sklp-arm64 ./cmd/sklp
       CGO_ENABLED=0 GOOS=linux  GOARCH=amd64 go build -buildvcs=false -o bin/sklet ./cmd/sklet
       CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -buildvcs=false -o bin/sklp-darwin ./cmd/sklp
+
+  - name: darwin-remote-deploy
+    scope: [go]
+    tools: [go]
+    run: |
+      linux_only=$(GOOS=darwin go list -deps ./cmd/sklp | grep -xE 'github.com/lalternativefabrique/sklp/(spacemanager|space|space/ociproc)' || true)
+      if [ -n "$linux_only" ]; then
+        echo "the macOS sklp must pilot a node natively; it now links the Linux runtime:"
+        echo "$linux_only"
+        exit 1
+      fi
