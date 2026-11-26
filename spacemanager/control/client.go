@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lalternativefabrique/sklp/spacemanager"
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 )
 
 // ErrNoSupervisor is returned (wrapped) by Dial/calls when the space socket
@@ -320,7 +320,7 @@ func (c *Client) apply(ctx context.Context, req ApplyRequest) (ApplyResult, erro
 // from the live front door, and passing none clears them all. Changed reports
 // whether the set actually moved, so a caller reconciling on a timer can tell a
 // real convergence from a no-op.
-func (c *Client) SetGatewayRoutes(ctx context.Context, routes []spacemanager.ResolvedRoute) (GatewayRoutesResponse, error) {
+func (c *Client) SetGatewayRoutes(ctx context.Context, routes []wire.ResolvedRoute) (GatewayRoutesResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	body, err := json.Marshal(GatewayRoutesRequest{Routes: routes})

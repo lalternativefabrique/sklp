@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/lalternativefabrique/sklp/internal/xdg"
-	"github.com/lalternativefabrique/sklp/spacemanager"
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 )
 
 // API version + route constants. The socket speaks plain HTTP/1.1; versioning
@@ -177,7 +177,7 @@ type ImageRequest struct {
 // that is the documented way to take the front door down, not a malformed
 // request.
 type GatewayRoutesRequest struct {
-	Routes []spacemanager.ResolvedRoute `json:"routes"`
+	Routes []wire.ResolvedRoute `json:"routes"`
 }
 
 // GatewayRoutesResponse reports what the node converged to. Changed is false
@@ -322,8 +322,8 @@ type PublicNICResponse struct {
 }
 
 type DataStoresResponse struct {
-	Space  string                   `json:"space"`
-	Stores []spacemanager.DataStore `json:"stores"`
+	Space  string           `json:"space"`
+	Stores []wire.DataStore `json:"stores"`
 }
 
 type StateResponse struct {

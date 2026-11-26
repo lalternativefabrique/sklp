@@ -1,3 +1,5 @@
+//go:build linux
+
 package control
 
 // netserve.go adds the NETWORK control listener: the SAME mux Serve mounts on the
