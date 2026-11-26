@@ -13,10 +13,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lalternativefabrique/sklp/cmd/sklp/internal/remoteapply"
 	"github.com/lalternativefabrique/sklp/internal/config"
-	"github.com/lalternativefabrique/sklp/internal/layout"
 	"github.com/lalternativefabrique/sklp/spacemanager/control"
-	"github.com/lalternativefabrique/sklp/spacemanager/deployvars"
 )
 
 // maybeRunRemoteDeploy inspects a plain `sklp deploy` invocation (no read/control
@@ -202,14 +201,17 @@ func runRemoteDeploy(dp deployTransport) int {
 		return 1
 	}
 
-	path, err := layout.New(dp.repo).Resolve(dp.stack, "deploy")
+	path, err := remoteapply.Resolve(dp.repo, dp.stack)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sklp deploy: %v\n", err)
 		return 2
 	}
 	fmt.Fprintf(os.Stderr, "sklp deploy: applying %s to %s (space %s)\n", dp.stack, describeTarget(dp), dp.space)
-	// Before the other sources: a project secret outranks env_files and config.yaml.
-	loadProjectSecretsIntoEnv(path)
+	src, err := remoteapply.Source(path, dp.stack, os.Stderr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sklp deploy: %v\n", err)
+		return 1
+	}
 
 	var opts []control.DialOption
 	if dp.caFinger != "" {
@@ -225,21 +227,7 @@ func runRemoteDeploy(dp deployTransport) int {
 	}
 	client = client.WithSpace(dp.space)
 
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sklp deploy: read deploy file: %v\n", err)
-		return 1
-	}
-	if err := deployvars.LoadSources(path, raw); err != nil {
-		fmt.Fprintf(os.Stderr, "sklp deploy: %v\n", err)
-		return 1
-	}
-	vars, err := deployvars.Collect(raw, os.LookupEnv)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sklp deploy: %v\n", err)
-		return 1
-	}
-	res, err := client.ApplySource(context.Background(), control.ApplySource{YAML: string(raw), Vars: vars, Stack: dp.stack}, dp.force)
+	res, err := client.ApplySource(context.Background(), src, dp.force)
 	if err != nil {
 		reportNetErr("sklp deploy", dp.space, fmt.Errorf("apply to remote supervisor for space %q: %w", dp.space, err))
 		return 1

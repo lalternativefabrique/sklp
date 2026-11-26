@@ -41,6 +41,7 @@ func rootCommand() cli.Command {
 			agentCommand(),
 			imageCommand(),
 			deployCommand(),
+			mcpCommand(),
 			gatewayCommand(),
 			authCommand(),
 			registryCommand(),

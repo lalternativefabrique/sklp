@@ -112,7 +112,7 @@ func SaveManifest(space string, services []spacemanager.Service, meta spacemanag
 // Call it ONLY after the supervisor is confirmed stopped, so a half-failed down
 // never loses a still-running space's manifest.
 func RemoveSpaceArtifacts(space string) error {
-	if err := validSpaceName(space); err != nil {
+	if err := ValidSpaceName(space); err != nil {
 		return err
 	}
 	if err := os.RemoveAll(spaceConfigDir(space)); err != nil {

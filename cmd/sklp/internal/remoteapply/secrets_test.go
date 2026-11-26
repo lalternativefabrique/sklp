@@ -1,7 +1,8 @@
-package main
+package remoteapply
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -37,25 +38,25 @@ func writeDeployYAML(t *testing.T, projectID string) string {
 	return path
 }
 
-func TestLoadProjectSecretsIntoEnv_NoProjectIDIsNoOp(t *testing.T) {
+func TestLoadProjectSecrets_NoProjectIDIsNoOp(t *testing.T) {
 	pinXDG(t)
 	path := writeDeployYAML(t, "")
-	loadProjectSecretsIntoEnv(path)
+	LoadProjectSecrets(path, io.Discard)
 	if _, set := os.LookupEnv("SCW_SECRET_KEY"); set {
 		t.Fatal("no project_id: must not touch the env at all")
 	}
 }
 
-func TestLoadProjectSecretsIntoEnv_NotLoggedInIsNoOp(t *testing.T) {
+func TestLoadProjectSecrets_NotLoggedInIsNoOp(t *testing.T) {
 	pinXDG(t)
 	path := writeDeployYAML(t, "proj-1")
-	loadProjectSecretsIntoEnv(path)
+	LoadProjectSecrets(path, io.Discard)
 	if _, set := os.LookupEnv("SCW_SECRET_KEY"); set {
 		t.Fatal("no token configured must not set anything, not fail the deploy")
 	}
 }
 
-func TestLoadProjectSecretsIntoEnv_FetchesAndSetsEnv(t *testing.T) {
+func TestLoadProjectSecrets_FetchesAndSetsEnv(t *testing.T) {
 	pinXDG(t)
 	srv := httptest.NewServer(resolveHandler(t, map[string]string{"SCW_SECRET_KEY": "from-core"}))
 	defer srv.Close()
@@ -69,14 +70,14 @@ func TestLoadProjectSecretsIntoEnv_FetchesAndSetsEnv(t *testing.T) {
 	os.Unsetenv("SCW_SECRET_KEY")
 
 	deployPath := writeDeployYAML(t, "proj-1")
-	loadProjectSecretsIntoEnv(deployPath)
+	LoadProjectSecrets(deployPath, io.Discard)
 
 	if got := os.Getenv("SCW_SECRET_KEY"); got != "from-core" {
 		t.Fatalf("SCW_SECRET_KEY = %q, want %q", got, "from-core")
 	}
 }
 
-func TestLoadProjectSecretsIntoEnv_HostEnvWins(t *testing.T) {
+func TestLoadProjectSecrets_HostEnvWins(t *testing.T) {
 	pinXDG(t)
 	srv := httptest.NewServer(resolveHandler(t, map[string]string{"SCW_SECRET_KEY": "from-core"}))
 	defer srv.Close()
@@ -90,9 +91,17 @@ func TestLoadProjectSecretsIntoEnv_HostEnvWins(t *testing.T) {
 	t.Setenv("SCW_SECRET_KEY", "already-set-by-operator")
 
 	deployPath := writeDeployYAML(t, "proj-1")
-	loadProjectSecretsIntoEnv(deployPath)
+	LoadProjectSecrets(deployPath, io.Discard)
 
 	if got := os.Getenv("SCW_SECRET_KEY"); got != "already-set-by-operator" {
 		t.Fatalf("host env was overwritten: got %q", got)
 	}
+}
+
+func pinXDG(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", dir)
+	t.Setenv(config.EnvToken, "")
 }
