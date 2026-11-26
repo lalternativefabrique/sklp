@@ -34,6 +34,7 @@ type Stores struct {
 	Nodes       *gatewaystore.KVNodeRepository
 	Routes      *gatewaystore.KVRouteRepository
 	Watches     *imageupdatestore.KVRepository
+	Follows     *FollowStore
 }
 
 // OpenStores creates the buckets if they do not exist and binds a repository
@@ -65,11 +66,16 @@ func OpenStores(ctx context.Context, js jetstream.JetStream, cipher imageupdates
 	if err != nil {
 		return nil, err
 	}
+	follows, err := bucket(ctx, js, FollowsBucket)
+	if err != nil {
+		return nil, err
+	}
 	return &Stores{
 		Deployments: deployconfigstore.NewKVRepository(deployments),
 		Nodes:       gatewaystore.NewKVNodeRepository(nodes, nodeNames),
 		Routes:      gatewaystore.NewKVRouteRepository(routes),
 		Watches:     imageupdatestore.NewKVRepository(watches, rolls, cipher),
+		Follows:     NewFollowStore(follows),
 	}, nil
 }
 

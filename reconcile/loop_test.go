@@ -203,3 +203,34 @@ func TestPassStopsWhenTheContextIsCancelled(t *testing.T) {
 		t.Fatalf("reconciled %v on a cancelled context, want nothing", got)
 	}
 }
+
+type targetsFunc func() []Target
+
+func (f targetsFunc) Targets(context.Context) []Target { return f() }
+
+func TestTargetLoopRunsEachRepoWithItsOwnReconcilers(t *testing.T) {
+	recA, recB := &recorder{}, &recorder{}
+	a := Target{Repo: "a", Branch: "main", Source: &stubSource{refs: []string{"sha-a"}}, Reconcilers: []Reconciler{recA}}
+	b := Target{Repo: "b", Branch: "main", Source: &stubSource{refs: []string{"sha-b"}}, Reconcilers: []Reconciler{recB}}
+	current := []Target{a}
+	loop := NewTargetLoop(targetsFunc(func() []Target { return current }), quiet())
+
+	loop.Pass(context.Background())
+	current = []Target{a, b}
+	loop.Pass(context.Background())
+
+	if got := recA.seen(); len(got) != 1 || got[0] != "sha-a" {
+		t.Fatalf("repo a reconcilers saw %v, want only sha-a once", got)
+	}
+	if got := recB.seen(); len(got) != 1 || got[0] != "sha-b" {
+		t.Fatalf("repo b reconcilers saw %v, want only sha-b once: a repo added while running is picked up", got)
+	}
+
+	current = []Target{b}
+	loop.Pass(context.Background())
+	current = []Target{a, b}
+	loop.Pass(context.Background())
+	if got := recA.seen(); len(got) != 2 {
+		t.Fatalf("a repo dropped then followed again must be applied again: %v", got)
+	}
+}

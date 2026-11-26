@@ -6,12 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"time"
-
-	natsserver "github.com/nats-io/nats-server/v2/server"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
 
 	"golang.org/x/sys/unix"
 
@@ -59,18 +53,6 @@ func reconcileCommand() cli.Command {
 
 			log := slog.Default()
 			reconcile.Describe(cfg, log)
-			if len(cfg.Targets) == 0 {
-				// Not an error: a node that only takes pushed deploys is a
-				// supported shape, and saying so beats exiting non-zero on it.
-				return 0
-			}
-
-			mirrors, err := reconcile.BuildMirrors(cfg, reconcile.CacheRoot())
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
-				return 1
-			}
-
 			node, err := localNode(args.String("space"), args.String("control-url"))
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
@@ -78,35 +60,25 @@ func reconcileCommand() cli.Command {
 			}
 			log.Info("reconcile: this node", "name", node.Name, "control", node.ControlURL)
 
-			nc, js, err := embeddedJetStream(reconcile.CacheRoot())
+			embedded, err := reconcile.OpenEmbeddedJetStream(reconcile.CacheRoot())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
 				return 1
 			}
-			defer nc.Close()
+			defer embedded.Close()
 
 			sealer, err := reconcile.LoadSealer(reconcile.KeyPath())
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
 				return 1
 			}
-			stores, err := reconcile.OpenStores(ctx, js, sealer)
+			stores, err := reconcile.OpenStores(ctx, embedded.JS, sealer)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
 				return 1
 			}
 
-			// Each repo gets its own reconcilers, because each reads its
-			// declarations out of its own mirror.
-			targets := make([]reconcile.Target, 0, len(mirrors))
-			var reconcilers []reconcile.Reconciler
-			for _, m := range mirrors {
-				targets = append(targets, m.Target)
-				reconcilers = append(reconcilers,
-					reconcile.BuildReconcilers(stores, node, m.Fetcher, nil)...)
-			}
-
-			loop := reconcile.NewLoop(targets, reconcilers, reconcile.Options{
+			loop := reconcile.NewTargetLoop(reconcile.NewRunner(stores, node, cfg.Targets, reconcile.CacheRoot(), log), reconcile.Options{
 				Interval: cfg.Interval,
 				Logger:   log,
 			})
@@ -122,7 +94,7 @@ func reconcileCommand() cli.Command {
 			runCtx, stop := signal.NotifyContext(ctx, unix.SIGINT, unix.SIGTERM)
 			defer stop()
 
-			poller := reconcile.StartImageRolling(runCtx, stores, 0)
+			poller := reconcile.StartImageRolling(runCtx, stores, 0, node)
 			defer poller.Stop()
 
 			if err := loop.Run(runCtx); err != nil {
@@ -159,36 +131,4 @@ func localNode(space, controlURL string) (*reconcile.LocalNode, error) {
 		Token:         token,
 		CAFingerprint: fingerprint,
 	}, nil
-}
-
-// embeddedJetStream starts the node's own NATS with JetStream on disk.
-//
-// It is private to this process: the reconciler's state is derived — Git
-// declares the topology, the node reports what runs — so it needs durability
-// and no one else's access. Losing the store costs one redundant pass.
-func embeddedJetStream(cacheRoot string) (*nats.Conn, jetstream.JetStream, error) {
-	opts := &natsserver.Options{
-		Port:      -1, // an ephemeral loopback port; nothing dials this from outside
-		JetStream: true,
-		StoreDir:  filepath.Join(cacheRoot, "reconcile", "nats"),
-		NoSigs:    true, // the command owns signal handling
-	}
-	srv, err := natsserver.NewServer(opts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("start jetstream: %w", err)
-	}
-	go srv.Start()
-	if !srv.ReadyForConnections(15 * time.Second) {
-		return nil, nil, fmt.Errorf("jetstream did not come up")
-	}
-	nc, err := nats.Connect(srv.ClientURL())
-	if err != nil {
-		return nil, nil, fmt.Errorf("connect jetstream: %w", err)
-	}
-	js, err := jetstream.New(nc)
-	if err != nil {
-		nc.Close()
-		return nil, nil, fmt.Errorf("open jetstream: %w", err)
-	}
-	return nc, js, nil
 }

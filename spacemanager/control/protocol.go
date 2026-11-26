@@ -140,7 +140,19 @@ const (
 	// RoutePublicNIC (node-scoped, GET) reports the public NIC reconciler:
 	// desired and observed policy routing, and the last repair.
 	RoutePublicNIC = "/v1/host/public-nic"
+
+	// RouteFollows (node-scoped) is the list of repos this node reconciles
+	// itself from: GET lists them, POST {repo, branch, name} adds one,
+	// DELETE RouteFollows/<name> drops it.
+	RouteFollows = "/v1/follows"
 )
+
+// FollowRequest asks a node to follow a public repo.
+type FollowRequest struct {
+	Repo   string `json:"repo"`
+	Branch string `json:"branch,omitempty"`
+	Name   string `json:"name,omitempty"`
+}
 
 // SpaceRoutePrefix returns the "/v1/spaces/<space>" path prefix a multi-space
 // network node (ServeNetMulti) dispatches on: every space-scoped route
