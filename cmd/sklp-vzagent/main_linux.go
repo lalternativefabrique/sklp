@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lalternativefabrique/sklp/internal/config"
 )
 
 const (
@@ -318,6 +320,7 @@ func guestBaseEnv(tty bool) []string {
 		"USER=root",
 		"SHELL=/bin/bash",
 		"TERM=" + envOr("TERM", "xterm-256color"),
+		config.EnvVMGuest + "=1",
 	}
 	if tty {
 		// Programs that check for a terminal read this to decide whether to

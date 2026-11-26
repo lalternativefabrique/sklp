@@ -35,6 +35,11 @@ import (
 // API selection and the deploy target at once.
 const EnvContext = "SKLP_CONTEXT"
 
+// EnvVMGuest marks a command relayed into the workstation's Linux VM. The VM
+// shares the workstation's home, hence its config, but it is the workstation's
+// local node: the workstation's active context must not retarget it.
+const EnvVMGuest = "SKLP_VM_GUEST"
+
 // EnvToken overrides the SaaS token at read time (CI use case).
 const EnvToken = "SKLP_TOKEN"
 
@@ -331,7 +336,7 @@ func (c *Config) ResolveContext(flagContext string) (string, Context, error) {
 	if name == "" {
 		name = os.Getenv(EnvContext)
 	}
-	if name == "" {
+	if name == "" && os.Getenv(EnvVMGuest) == "" {
 		name = c.CurrentContext
 	}
 	if name == "" {

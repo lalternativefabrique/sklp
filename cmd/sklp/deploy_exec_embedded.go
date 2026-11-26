@@ -38,7 +38,7 @@ func deployExecCommand() cli.Command {
 // pairs consume two tokens.
 var execKnownStringFlags = map[string]bool{
 	"space": true, "server": true, "addr": true, "token": true,
-	"token-file": true, "ca-fingerprint": true,
+	"token-file": true, "ca-fingerprint": true, "context": true, "config": true,
 }
 
 // runDeployExec runs a command inside a live instance of a service. Usage:
@@ -232,6 +232,10 @@ func setExecFlag(flags *execFlags, name, v string) {
 		flags.tokenFile = v
 	case "ca-fingerprint":
 		flags.caFinger = v
+	case "context":
+		flags.context = v
+	case "config":
+		flags.configFile = v
 	}
 }
 
