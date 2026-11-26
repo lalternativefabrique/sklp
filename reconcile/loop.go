@@ -40,11 +40,21 @@ type Target struct {
 	Repo   string
 	Branch string
 	Source Source
+	// Reconcilers act on this repo alone, on top of the loop's own: they read
+	// the repo's files through its mirror, so they cannot serve another repo.
+	Reconcilers []Reconciler
+}
+
+// TargetSource answers the repos to reconcile, read again on every pass so a
+// repo followed or dropped while the node runs is picked up without a restart.
+type TargetSource interface {
+	Targets(ctx context.Context) []Target
 }
 
 // Loop polls its targets and reconciles the ones whose commit moved.
 type Loop struct {
 	targets     []Target
+	source      TargetSource
 	reconcilers []Reconciler
 	interval    time.Duration
 	log         *slog.Logger
@@ -80,6 +90,13 @@ func NewLoop(targets []Target, reconcilers []Reconciler, opts Options) *Loop {
 	}
 }
 
+// NewTargetLoop polls whatever source answers on each pass.
+func NewTargetLoop(source TargetSource, opts Options) *Loop {
+	l := NewLoop(nil, nil, opts)
+	l.source = source
+	return l
+}
+
 // Run polls until ctx is cancelled. It returns nil on cancellation: stopping
 // because the node is shutting down is not a failure to report.
 //
@@ -106,7 +123,12 @@ func (l *Loop) Run(ctx context.Context) error {
 // One target's failure does not stop the others: a repo whose credentials
 // expired must not keep the rest of this node's spaces from reconciling.
 func (l *Loop) Pass(ctx context.Context) {
-	for _, target := range l.targets {
+	targets := l.targets
+	if l.source != nil {
+		targets = l.source.Targets(ctx)
+		l.forgetAllBut(targets)
+	}
+	for _, target := range targets {
 		if ctx.Err() != nil {
 			return
 		}
@@ -130,7 +152,7 @@ func (l *Loop) reconcileTarget(ctx context.Context, target Target) error {
 	// remembered when they all succeeded — so a transient failure is retried
 	// on the next pass instead of being skipped as "already seen".
 	var errs []error
-	for _, r := range l.reconcilers {
+	for _, r := range append(append([]Reconciler(nil), l.reconcilers...), target.Reconcilers...) {
 		if rerr := r.Reconcile(ctx, target.Repo, ref); rerr != nil {
 			errs = append(errs, rerr)
 		}
@@ -154,4 +176,20 @@ func (l *Loop) remember(repo, ref string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.seen[repo] = ref
+}
+
+// forgetAllBut drops the remembered ref of a repo no longer reconciled, so
+// following it again applies it again instead of reading as already seen.
+func (l *Loop) forgetAllBut(targets []Target) {
+	keep := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		keep[t.Repo] = true
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for repo := range l.seen {
+		if !keep[repo] {
+			delete(l.seen, repo)
+		}
+	}
 }

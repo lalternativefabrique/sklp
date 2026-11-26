@@ -286,6 +286,7 @@ func RunAgent(listen, advertise, gatewayMode string, meshOpts MeshOptions, publi
 		if err := startMultiNetListener(ctx, reg, "", listen, materialize, meshOpts.RelayDomain, nodeHost); err != nil {
 			fmt.Fprintf(os.Stderr, "sklet agent: network control API disabled: %v\n", err)
 		}
+		defer startNodeReconcile(ctx, listen).Close()
 	}
 
 	if err := sc.RunAll(ctx, opts); err != nil {

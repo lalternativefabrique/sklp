@@ -31,8 +31,21 @@ type LocalNode struct {
 	// localhost, so this is read from the node's own credentials rather than
 	// left empty.
 	Token string
+	// TokenFunc, when set, is read on every call instead of Token: a node
+	// whose token is rotated while it runs keeps reaching its own API.
+	TokenFunc func() (string, error)
 	// CAFingerprint pins the supervisor's self-signed certificate.
 	CAFingerprint string
+}
+
+// CurrentToken answers the token to authenticate with right now.
+func (n *LocalNode) CurrentToken() string {
+	if n.TokenFunc != nil {
+		if tok, err := n.TokenFunc(); err == nil {
+			return tok
+		}
+	}
+	return n.Token
 }
 
 // Credential implements deployapply.NodeDirectory.
@@ -61,7 +74,7 @@ func (n *LocalNode) address() deployapply.NodeAddress {
 	return deployapply.NodeAddress{
 		ServerURL:     n.ControlURL,
 		CAFingerprint: n.CAFingerprint,
-		SealedToken:   []byte(n.Token),
+		SealedToken:   []byte(n.CurrentToken()),
 	}
 }
 

@@ -116,6 +116,10 @@ func newMultiMuxWithTokens(reg *Registry, materialize Materializer, tokens *toke
 			serveRestores(w, r)
 			return
 		}
+		if r.URL.Path == RouteFollows || strings.HasPrefix(r.URL.Path, RouteFollows+"/") {
+			serveFollows(w, r)
+			return
+		}
 		if r.URL.Path == RoutePublicNIC {
 			servePublicNIC(w, r)
 			return
