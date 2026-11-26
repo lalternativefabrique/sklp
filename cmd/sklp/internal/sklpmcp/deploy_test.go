@@ -1,4 +1,4 @@
-package mcpnode
+package sklpmcp
 
 import (
 	"context"
@@ -125,6 +125,12 @@ func newFakeNode(t *testing.T) *fakeNode {
 		f.record(r)
 		writeJSON(w, http.StatusAccepted, control.DownResponse{Stopping: true})
 	})
+	mux.HandleFunc("POST /v1/spaces/rolling-demo/exec/web", func(w http.ResponseWriter, r *http.Request) {
+		f.record(r)
+		w.Header().Set("Trailer", control.HeaderExecExitCode)
+		fmt.Fprintf(w, "hello\ntoken=%s\n", testToken)
+		w.Header().Set(control.HeaderExecExitCode, "3")
+	})
 	mux.HandleFunc("GET /v1/spaces/locked/state", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad token "+testToken, http.StatusUnauthorized)
 	})
@@ -242,50 +248,57 @@ func (h *harness) ok(name string, args map[string]any, out any) {
 	}
 }
 
-func TestNewServerRequiresAnExplicitContext(t *testing.T) {
+func TestNoContextServesNoNodeEvenWithAnActiveOne(t *testing.T) {
 	f := newFakeNode(t)
 	writeConfig(t, f)
 	t.Setenv(config.EnvContext, "demo")
-	if _, err := NewServer(Options{}); err == nil || !strings.Contains(err.Error(), "-context is required") {
-		t.Fatalf("err = %v, want a refusal to assume a context", err)
+	cs := connect(t, Options{})
+	tools, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range tools.Tools {
+		if strings.HasPrefix(tl.Name, "deploy_") && tl.Name != "deploy_contexts" {
+			t.Fatalf("%s served without -context", tl.Name)
+		}
 	}
 	if _, err := NewServer(Options{Context: "nope"}); err == nil {
 		t.Fatal("an unknown context must be refused")
 	}
 }
 
-func TestListContextsNeverShowsTokensOrFingerprints(t *testing.T) {
+func TestDeployContextsNeverShowsTokensOrFingerprints(t *testing.T) {
 	h := newHarness(t, false)
 	var out contextsOut
-	h.ok("list_contexts", nil, &out)
+	h.ok("deploy_contexts", nil, &out)
 	if out.Bound != "demo" || len(out.Contexts) != 2 {
 		t.Fatalf("got %+v", out)
 	}
 	if out.Contexts[0].Name != "demo" || !out.Contexts[0].Bound || out.Contexts[0].Server != h.node.srv.URL {
 		t.Fatalf("demo row = %+v", out.Contexts[0])
 	}
-	_, text := h.call("list_contexts", nil)
+	_, text := h.call("deploy_contexts", nil)
 	if strings.Contains(text, `"ab"`) {
 		t.Fatalf("a fingerprint was listed: %s", text)
 	}
 }
 
-func TestListSpaces(t *testing.T) {
+func TestDeploySpaces(t *testing.T) {
 	h := newHarness(t, false)
 	var out spacesOut
-	h.ok("list_spaces", nil, &out)
+	h.ok("deploy_spaces", nil, &out)
 	if out.Node != "demo-node" || len(out.Spaces) != 2 || out.Spaces[1].Name != "rolling-demo" || out.Spaces[1].Running != 1 {
 		t.Fatalf("got %+v", out)
 	}
-	if _, text := h.call("list_spaces", nil); strings.Contains(text, "/home/secret/path") {
+	if _, text := h.call("deploy_spaces", nil); strings.Contains(text, "/home/secret/path") {
 		t.Fatalf("the node's host paths were exposed: %s", text)
 	}
 }
 
-func TestGetSpace(t *testing.T) {
+func TestDeployGet(t *testing.T) {
 	h := newHarness(t, false)
 	var out spaceOut
-	h.ok("get_space", map[string]any{"space": "rolling-demo"}, &out)
+	h.ok("deploy_get", map[string]any{"space": "rolling-demo"}, &out)
 	if !out.AllReady || len(out.Services) != 1 {
 		t.Fatalf("got %+v", out)
 	}
@@ -293,65 +306,65 @@ func TestGetSpace(t *testing.T) {
 	if web.Image != "traefik/whoami:v1.10.4" || len(web.Instances) != 1 || web.Instances[0].State != "ready" || len(web.Rollouts) != 1 {
 		t.Fatalf("web = %+v", web)
 	}
-	if res, text := h.call("get_space", map[string]any{"space": "../etc"}); !res.IsError {
+	if res, text := h.call("deploy_get", map[string]any{"space": "../etc"}); !res.IsError {
 		t.Fatalf("a path-like space name must be refused before any request: %s", text)
 	}
-	if res, _ := h.call("get_space", map[string]any{"space": ""}); !res.IsError {
+	if res, _ := h.call("deploy_get", map[string]any{"space": ""}); !res.IsError {
 		t.Fatal("an empty space must be refused")
 	}
 }
 
 func TestAuthErrorsCarryTheStatusOnly(t *testing.T) {
 	h := newHarness(t, false)
-	res, text := h.call("get_space", map[string]any{"space": "locked"})
+	res, text := h.call("deploy_get", map[string]any{"space": "locked"})
 	if !res.IsError || text != "the node refused the context's credentials (status 401)" {
 		t.Fatalf("got %v %q", res.IsError, text)
 	}
 }
 
-func TestGetManifestWithholdsSensitiveValues(t *testing.T) {
+func TestDeployManifestWithholdsSensitiveValues(t *testing.T) {
 	h := newHarness(t, false)
 	var out control.ManifestResponse
-	h.ok("get_manifest", map[string]any{"space": "rolling-demo"}, &out)
+	h.ok("deploy_manifest", map[string]any{"space": "rolling-demo"}, &out)
 	env := out.Services[0].Env
 	if len(env) != 3 || env[1].Key != "API_SECRET" || env[1].Value != "" || env[2].Value != "debug" || env[0].Ref != "DB_PASS" {
 		t.Fatalf("env = %+v", env)
 	}
 }
 
-func TestServiceLogsIsBoundedAndRedacted(t *testing.T) {
+func TestDeployLogsIsBoundedAndRedacted(t *testing.T) {
 	h := newHarness(t, false)
 	var out logsOut
-	h.ok("service_logs", map[string]any{"space": "rolling-demo", "service": "web", "lines": 10}, &out)
+	h.ok("deploy_logs", map[string]any{"space": "rolling-demo", "service": "web", "lines": 10}, &out)
 	if len(out.Lines) != 10 || !out.Truncated || out.Lines[9] != "leaked "+redacted || out.Lines[0] != "line 241" {
 		t.Fatalf("got %+v", out)
 	}
-	h.ok("service_logs", map[string]any{"space": "rolling-demo", "service": "web"}, &out)
+	h.ok("deploy_logs", map[string]any{"space": "rolling-demo", "service": "web"}, &out)
 	if len(out.Lines) != defaultLogLines {
 		t.Fatalf("default tail = %d lines", len(out.Lines))
 	}
 }
 
-func TestListDataStores(t *testing.T) {
+func TestDeployDatastores(t *testing.T) {
 	h := newHarness(t, false)
 	var out dataStoresOut
-	h.ok("list_datastores", nil, &out)
+	h.ok("deploy_datastores", nil, &out)
 	if len(out.Spaces) != 2 || out.Spaces[0].Space != "other" || out.Spaces[0].Error == "" || len(out.Spaces[1].Stores) != 1 {
 		t.Fatalf("got %+v", out)
 	}
-	h.ok("list_datastores", map[string]any{"space": "rolling-demo"}, &out)
+	h.ok("deploy_datastores", map[string]any{"space": "rolling-demo"}, &out)
 	if len(out.Spaces) != 1 || out.Spaces[0].Stores[0].Engine != wire.EnginePostgres {
 		t.Fatalf("got %+v", out)
 	}
 }
 
-func TestApplyStackSendsTheFileAndItsVars(t *testing.T) {
+func TestDeployApplySendsTheFileAndItsVars(t *testing.T) {
 	h := newHarness(t, false)
 	t.Setenv("DB_PASS", "")
 	os.Unsetenv("DB_PASS")
 	repo := writeRepo(t)
 	var out applyOut
-	h.ok("apply_stack", map[string]any{"repo": repo, "stack": "web", "space": "rolling-demo"}, &out)
+	h.ok("deploy_apply", map[string]any{"repo": repo, "stack": "web", "space": "rolling-demo"}, &out)
 	if out.Result != control.ResultConfigured || len(out.Changes) != 1 || out.Warnings[0] != "echo "+redacted {
 		t.Fatalf("got %+v", out)
 	}
@@ -367,23 +380,37 @@ func TestApplyStackSendsTheFileAndItsVars(t *testing.T) {
 	}
 }
 
-func TestApplyStackRefusesUnsetVars(t *testing.T) {
+func TestDeployApplyRefusesUnsetVars(t *testing.T) {
 	h := newHarness(t, false)
 	repo := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repo, ".sklp", "web"), 0o755)
 	_ = os.WriteFile(filepath.Join(repo, ".sklp", "web", "deploy.yaml"), []byte("services:\n  web:\n    image: x\n    env:\n      A: ${SKLP_TEST_NEVER_SET}\n"), 0o644)
-	res, text := h.call("apply_stack", map[string]any{"repo": repo, "stack": "web", "space": "rolling-demo"})
+	res, text := h.call("deploy_apply", map[string]any{"repo": repo, "stack": "web", "space": "rolling-demo"})
 	if !res.IsError || !strings.Contains(text, "SKLP_TEST_NEVER_SET") || h.node.hit("POST /v1/spaces/rolling-demo/apply") {
 		t.Fatalf("got %v %q", res.IsError, text)
+	}
+}
+
+func TestDeployExec(t *testing.T) {
+	h := newHarness(t, false)
+	var out outputOut
+	h.ok("deploy_exec", map[string]any{"space": "rolling-demo", "service": "web", "command": []string{"sh", "-c", "env"}}, &out)
+	if out.OK || out.ExitCode != 3 || len(out.Output) != 2 || out.Output[0] != "hello" || out.Output[1] != "token="+redacted {
+		t.Fatalf("got %+v", out)
+	}
+	var req control.ExecRequest
+	_ = json.Unmarshal(h.node.body["/v1/spaces/rolling-demo/exec/web"], &req)
+	if strings.Join(req.Cmd, " ") != "sh -c env" {
+		t.Fatalf("cmd = %v", req.Cmd)
 	}
 }
 
 func TestRestartRunAndDelete(t *testing.T) {
 	h := newHarness(t, false)
 	var ack ackOut
-	h.ok("restart_service", map[string]any{"space": "rolling-demo", "service": "web"}, &ack)
-	h.ok("run_job", map[string]any{"space": "rolling-demo", "job": "migrate"}, &ack)
-	h.ok("delete_space", map[string]any{"space": "rolling-demo", "volumes": true}, &ack)
+	h.ok("deploy_restart", map[string]any{"space": "rolling-demo", "service": "web"}, &ack)
+	h.ok("deploy_run_job", map[string]any{"space": "rolling-demo", "job": "migrate"}, &ack)
+	h.ok("deploy_delete", map[string]any{"space": "rolling-demo", "volumes": true}, &ack)
 	if ack.Status != "delete requested; named volumes destroyed" {
 		t.Fatalf("ack = %+v", ack)
 	}
@@ -399,7 +426,9 @@ func TestRestartRunAndDelete(t *testing.T) {
 	}
 }
 
-var destructiveTools = []string{"apply_stack", "restart_service", "run_job", "delete_space"}
+var destructiveTools = []string{"deploy_apply", "deploy_exec", "deploy_restart", "deploy_run_job", "deploy_delete", "space_exec", "space_down"}
+
+var writeTools = []string{"dev_up", "dev_down", "space_stop", "run_pipeline", "job_cancel"}
 
 func TestProtocolEndToEnd(t *testing.T) {
 	h := newHarness(t, false)
@@ -418,8 +447,14 @@ func TestProtocolEndToEnd(t *testing.T) {
 			t.Fatalf("%s has no description or schema", tl.Name)
 		}
 	}
-	if len(byName) != 10 {
+	if len(byName) != 25 {
 		t.Fatalf("%d tools listed", len(byName))
+	}
+	for _, name := range writeTools {
+		a := byName[name].Annotations
+		if a == nil || a.DestructiveHint == nil || *a.DestructiveHint || a.ReadOnlyHint {
+			t.Fatalf("%s is not marked as a non-destructive write: %+v", name, a)
+		}
 	}
 	for _, name := range destructiveTools {
 		a := byName[name].Annotations
@@ -427,14 +462,14 @@ func TestProtocolEndToEnd(t *testing.T) {
 			t.Fatalf("%s is not marked destructive: %+v", name, a)
 		}
 	}
-	if a := byName["get_space"].Annotations; a == nil || !a.ReadOnlyHint {
+	if a := byName["deploy_get"].Annotations; a == nil || !a.ReadOnlyHint {
 		t.Fatalf("get_space is not read-only: %+v", a)
 	}
 
 	var space spaceOut
-	h.ok("get_space", map[string]any{"space": "rolling-demo"}, &space)
+	h.ok("deploy_get", map[string]any{"space": "rolling-demo"}, &space)
 	var ack ackOut
-	h.ok("restart_service", map[string]any{"space": "rolling-demo", "service": "web"}, &ack)
+	h.ok("deploy_restart", map[string]any{"space": "rolling-demo", "service": "web"}, &ack)
 	if ack.Status != "restart requested" {
 		t.Fatalf("ack = %+v", ack)
 	}
@@ -446,7 +481,7 @@ func TestReadOnlyHidesAndRefusesDestructiveTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 6 {
+	if len(tools.Tools) != 13 {
 		t.Fatalf("%d tools in read-only mode", len(tools.Tools))
 	}
 	for _, tl := range tools.Tools {
@@ -454,7 +489,7 @@ func TestReadOnlyHidesAndRefusesDestructiveTools(t *testing.T) {
 			t.Fatalf("%s listed in read-only mode", tl.Name)
 		}
 	}
-	for _, name := range destructiveTools {
+	for _, name := range append(destructiveTools, writeTools...) {
 		res, err := h.cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: map[string]any{"space": "rolling-demo", "service": "web", "job": "migrate"}})
 		if err == nil && !res.IsError {
 			t.Fatalf("%s ran in read-only mode", name)

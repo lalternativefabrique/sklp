@@ -16,10 +16,10 @@ func relayDevLima(cfg DevConfig, spaceName string) error {
 	return limarelay.RelaySelf(cfg.Repo)
 }
 
-// relayDownLima relays `sklp dev down` into the VM when one is running —
-// the up ran in the guest, so its statefile lives there. A false return
-// lets the host-side down proceed.
-func relayDownLima(_ []string) bool {
+// relayToRunningVM relays this invocation into the VM when one is running:
+// the stacks ran in the guest, so their statefiles and logs live there. A
+// false return lets the host-side verb proceed.
+func relayToRunningVM(_ []string) bool {
 	if !limarelay.VMRunning() {
 		return false
 	}

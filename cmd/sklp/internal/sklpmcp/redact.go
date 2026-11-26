@@ -1,4 +1,4 @@
-package mcpnode
+package sklpmcp
 
 import (
 	"bytes"
@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/lalternativefabrique/sklp/internal/config"
 )
 
 const (
@@ -19,10 +21,20 @@ var authStatusRE = regexp.MustCompile(`status (401|403)\b`)
 
 type redactor struct{ secrets []string }
 
-func (n *node) redactor() *redactor {
-	r := &redactor{}
-	r.add(n.token, n.pin, strings.ReplaceAll(strings.ToLower(n.pin), ":", ""))
-	return r
+// knownSecrets are the bearer tokens this machine holds, and the pinned
+// fingerprint of the served context; no tool answer may carry them.
+func knownSecrets(n *node) []string {
+	var out []string
+	if cfg, _, err := config.Load(); err == nil {
+		out = append(out, config.EffectiveAPIToken(cfg.API))
+		for _, c := range cfg.Contexts {
+			out = append(out, config.EffectiveContextToken(c))
+		}
+	}
+	if n != nil {
+		out = append(out, n.token, n.pin, strings.ReplaceAll(strings.ToLower(n.pin), ":", ""))
+	}
+	return out
 }
 
 func (r *redactor) add(values ...string) {

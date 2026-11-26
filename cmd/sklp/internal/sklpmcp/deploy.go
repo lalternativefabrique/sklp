@@ -1,4 +1,4 @@
-package mcpnode
+package sklpmcp
 
 import (
 	"context"
@@ -31,69 +31,38 @@ const (
 	maxLineBytes    = 2000
 )
 
-type toolDef struct {
-	destructive bool
-	add         func(*mcp.Server)
-}
-
-func define[In, Out any](n *node, t *mcp.Tool, destructive bool, fn func(context.Context, In, *redactor) (Out, error)) toolDef {
-	if t.Annotations == nil {
-		t.Annotations = &mcp.ToolAnnotations{}
-	}
-	if destructive {
-		yes := true
-		t.Annotations.DestructiveHint = &yes
-	} else {
-		t.Annotations.ReadOnlyHint = true
-	}
-	return toolDef{destructive: destructive, add: func(s *mcp.Server) {
-		mcp.AddTool(s, t, func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, Out, error) {
-			var zero Out
-			r := n.redactor()
-			out, err := fn(ctx, in, r)
-			if err != nil {
-				return nil, zero, r.err(err)
-			}
-			if out, err = scrub(out, r); err != nil {
-				return nil, zero, r.err(err)
-			}
-			return nil, out, nil
-		})
-	}}
-}
-
 func (n *node) tools() []toolDef {
 	return []toolDef{
-		define(n, &mcp.Tool{Name: "list_contexts", Description: "List the deploy contexts configured on this machine (name, node URL, default space). " +
-			"This server is bound to one of them (bound=true); every other tool targets that node only."}, false, n.listContexts),
-		define(n, &mcp.Tool{Name: "list_spaces", Description: "List the spaces the node runs, with their status and container counts."}, false, n.listSpaces),
-		define(n, &mcp.Tool{Name: "get_space", Description: "Show one space as its supervisor sees it: each service and job, its image, " +
-			"instances (state, restarts, uptime), recent rollouts and job runs."}, false, n.getSpace),
-		define(n, &mcp.Tool{Name: "get_manifest", Description: "Show the manifest the space was declared with: services, jobs, images, ports, routes, " +
-			"env keys. Values of ${VAR} references and secret-looking literals are never returned."}, false, n.getManifest),
-		define(n, &mcp.Tool{Name: "service_logs", Description: "Return the last lines a service or job wrote to stdout/stderr (no follow)."}, false, n.serviceLogs),
-		define(n, &mcp.Tool{Name: "list_datastores", Description: "List the services keeping data in named volumes and how well each is protected " +
-			"(none, opaque, backed, disposable), with the last backup outcome."}, false, n.listDataStores),
-		define(n, &mcp.Tool{Name: "apply_stack", Description: "Deploy a stack from a local repository to a space of the node, like `sklp deploy apply <stack> -space <space>`: " +
+		define(&mcp.Tool{Name: "deploy_spaces", Description: "List the spaces the node runs, with their status and container counts."}, read, n.listSpaces),
+		define(&mcp.Tool{Name: "deploy_get", Description: "Show one space as its supervisor sees it: each service and job, its image, " +
+			"instances (state, restarts, uptime), recent rollouts and job runs."}, read, n.getSpace),
+		define(&mcp.Tool{Name: "deploy_manifest", Description: "Show the manifest the space was declared with: services, jobs, images, ports, routes, " +
+			"env keys. Values of ${VAR} references and secret-looking literals are never returned."}, read, n.getManifest),
+		define(&mcp.Tool{Name: "deploy_logs", Description: "Return the last lines a service or job wrote to stdout/stderr (no follow)."}, read, n.serviceLogs),
+		define(&mcp.Tool{Name: "deploy_datastores", Description: "List the services keeping data in named volumes and how well each is protected " +
+			"(none, opaque, backed, disposable), with the last backup outcome."}, read, n.listDataStores),
+		define(&mcp.Tool{Name: "deploy_apply", Description: "Deploy a stack from a local repository to a space of the node, like `sklp deploy apply <stack> -space <space>`: " +
 			"sends .sklp/<stack>/deploy.yaml and the ${VAR} values it references (from env_files, stack config and the environment). " +
 			"Creates the space, or reconciles it toward the file.",
-			Annotations: &mcp.ToolAnnotations{IdempotentHint: true}}, true, n.applyStack),
-		define(n, &mcp.Tool{Name: "restart_service", Description: "Bounce every live instance of a service in a space."}, true, n.restartService),
-		define(n, &mcp.Tool{Name: "run_job", Description: "Re-run a oneshot job of a space that reached a terminal state. Fails if a run is in flight."}, true, n.runJob),
-		define(n, &mcp.Tool{Name: "delete_space", Description: "Stop a space and remove its manifest so it does not come back. " +
-			"With volumes=true its named volumes, and the data in them, are destroyed too, irreversibly."}, true, n.deleteSpace),
+			Annotations: &mcp.ToolAnnotations{IdempotentHint: true}}, destructive, n.applyStack),
+		define(&mcp.Tool{Name: "deploy_exec", Description: "Run a command in a live instance of a service on the node, without a terminal or stdin " +
+			"(sklp deploy exec <service> -space <space> -- <cmd>). Returns its exit code and the last lines of its output."}, destructive, n.execService),
+		define(&mcp.Tool{Name: "deploy_restart", Description: "Bounce every live instance of a service in a space."}, destructive, n.restartService),
+		define(&mcp.Tool{Name: "deploy_run_job", Description: "Re-run a oneshot job of a space that reached a terminal state. Fails if a run is in flight."}, destructive, n.runJob),
+		define(&mcp.Tool{Name: "deploy_delete", Description: "Stop a space and remove its manifest so it does not come back. " +
+			"With volumes=true its named volumes, and the data in them, are destroyed too, irreversibly."}, destructive, n.deleteSpace),
 	}
 }
 
 type noInput struct{}
 
 type spaceInput struct {
-	Space string `json:"space" jsonschema:"name of the space on the node (see list_spaces)"`
+	Space string `json:"space" jsonschema:"name of the space on the node (see deploy_spaces)"`
 }
 
 func requireSpace(space string) error {
 	if space == "" {
-		return errors.New("space is required (see list_spaces)")
+		return errors.New("space is required (see deploy_spaces)")
 	}
 	return nil
 }
@@ -107,34 +76,39 @@ type contextRow struct {
 }
 
 type contextsOut struct {
-	Bound     string       `json:"bound"`
+	Bound     string       `json:"bound,omitempty"`
 	Contexts  []contextRow `json:"contexts"`
 	Truncated bool         `json:"truncated,omitempty"`
 }
 
-func (n *node) listContexts(_ context.Context, _ noInput, _ *redactor) (contextsOut, error) {
-	cfg, _, err := config.Load()
-	if err != nil {
-		return contextsOut{}, err
-	}
-	names := make([]string, 0, len(cfg.Contexts))
-	for name := range cfg.Contexts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	out := contextsOut{Bound: n.context, Contexts: []contextRow{}}
-	for _, name := range names {
-		if len(out.Contexts) == maxContexts {
-			out.Truncated = true
-			break
+func listContexts(n *node) func(context.Context, noInput, *redactor) (contextsOut, error) {
+	return func(context.Context, noInput, *redactor) (contextsOut, error) {
+		cfg, _, err := config.Load()
+		if err != nil {
+			return contextsOut{}, err
 		}
-		c := cfg.Contexts[name]
-		out.Contexts = append(out.Contexts, contextRow{
-			Name: name, Server: c.Server, Space: c.Space,
-			Bound: name == n.context, Current: name == cfg.CurrentContext,
-		})
+		names := make([]string, 0, len(cfg.Contexts))
+		for name := range cfg.Contexts {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		out := contextsOut{Contexts: []contextRow{}}
+		if n != nil {
+			out.Bound = n.context
+		}
+		for _, name := range names {
+			if len(out.Contexts) == maxContexts {
+				out.Truncated = true
+				break
+			}
+			c := cfg.Contexts[name]
+			out.Contexts = append(out.Contexts, contextRow{
+				Name: name, Server: c.Server, Space: c.Space,
+				Bound: out.Bound == name, Current: name == cfg.CurrentContext,
+			})
+		}
+		return out, nil
 	}
-	return out, nil
 }
 
 type spaceRow struct {
@@ -300,7 +274,7 @@ func withheldEnv(svcs []control.ManifestService) []control.ManifestService {
 
 type logsInput struct {
 	Space   string `json:"space" jsonschema:"name of the space on the node"`
-	Service string `json:"service" jsonschema:"service or job name (see get_space)"`
+	Service string `json:"service" jsonschema:"service or job name (see deploy_get)"`
 	Lines   int    `json:"lines,omitempty" jsonschema:"how many of the last lines to return (default 100, at most 1000)"`
 }
 
@@ -316,7 +290,7 @@ func (n *node) serviceLogs(ctx context.Context, in logsInput, r *redactor) (logs
 		return logsOut{}, err
 	}
 	if in.Service == "" {
-		return logsOut{}, errors.New("service is required (see get_space)")
+		return logsOut{}, errors.New("service is required (see deploy_get)")
 	}
 	lines := in.Lines
 	if lines <= 0 {
@@ -333,11 +307,11 @@ func (n *node) serviceLogs(ctx context.Context, in logsInput, r *redactor) (logs
 	if err := c.Logs(ctx, in.Service, false, ring); err != nil {
 		return logsOut{}, err
 	}
-	got := ring.result()
+	got, dropped := ring.snapshot()
 	for i, l := range got {
 		got[i] = r.str(l)
 	}
-	return logsOut{Space: in.Space, Service: in.Service, Lines: got, Truncated: ring.dropped}, nil
+	return logsOut{Space: in.Space, Service: in.Service, Lines: nonNil(got), Truncated: dropped}, nil
 }
 
 type applyInput struct {
@@ -390,12 +364,12 @@ func (n *node) applyStack(ctx context.Context, in applyInput, r *redactor) (appl
 
 type serviceInput struct {
 	Space   string `json:"space" jsonschema:"name of the space on the node"`
-	Service string `json:"service" jsonschema:"service name (see get_space)"`
+	Service string `json:"service" jsonschema:"service name (see deploy_get)"`
 }
 
 type jobInput struct {
 	Space string `json:"space" jsonschema:"name of the space on the node"`
-	Job   string `json:"job" jsonschema:"oneshot job name (see get_space)"`
+	Job   string `json:"job" jsonschema:"oneshot job name (see deploy_get)"`
 }
 
 type ackOut struct {
@@ -518,55 +492,35 @@ func (n *node) listDataStores(ctx context.Context, in dataStoresInput, r *redact
 	return out, nil
 }
 
-func head[T any](s []T, n int) []T {
-	if len(s) > n {
-		return s[:n]
-	}
-	return s
+type deployExecInput struct {
+	Space          string   `json:"space" jsonschema:"name of the space on the node"`
+	Service        string   `json:"service" jsonschema:"service name (see deploy_get)"`
+	Command        []string `json:"command" jsonschema:"argv to run, e.g. [\"sh\",\"-c\",\"env | cut -d= -f1\"]"`
+	TimeoutSeconds int      `json:"timeout_seconds,omitempty" jsonschema:"stop waiting after this many seconds (default 60, at most 600)"`
 }
 
-func tail[T any](s []T, n int) []T {
-	if len(s) > n {
-		return s[len(s)-n:]
+func (n *node) execService(ctx context.Context, in deployExecInput, r *redactor) (outputOut, error) {
+	if err := requireSpace(in.Space); err != nil {
+		return outputOut{}, err
 	}
-	return s
-}
-
-type lineRing struct {
-	max     int
-	lines   []string
-	partial strings.Builder
-	dropped bool
-}
-
-func (l *lineRing) Write(p []byte) (int, error) {
-	for _, b := range p {
-		if b == '\n' {
-			l.push()
-			continue
-		}
-		if l.partial.Len() < maxLineBytes {
-			l.partial.WriteByte(b)
-		}
+	if in.Service == "" || len(in.Command) == 0 {
+		return outputOut{}, errors.New("service and command are required")
 	}
-	return len(p), nil
-}
-
-func (l *lineRing) push() {
-	l.lines = append(l.lines, l.partial.String())
-	l.partial.Reset()
-	if len(l.lines) > l.max {
-		l.lines = l.lines[1:]
-		l.dropped = true
+	c, err := n.spaceClient(in.Space)
+	if err != nil {
+		return outputOut{}, err
 	}
-}
-
-func (l *lineRing) result() []string {
-	if l.partial.Len() > 0 {
-		l.push()
+	wait := in.TimeoutSeconds
+	if wait <= 0 {
+		wait = defaultExecWait
 	}
-	if l.lines == nil {
-		return []string{}
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(min(wait, maxExecWait))*time.Second)
+	defer cancel()
+	ring := &lineRing{max: maxOutputLines}
+	code, err := c.Exec(ctx, in.Service, in.Command, false, 0, 0, strings.NewReader(""), ring, ring)
+	if err != nil {
+		return outputOut{}, err
 	}
-	return l.lines
+	out, dropped := ring.snapshot()
+	return outputOut{OK: code == 0, ExitCode: code, Output: nonNil(out), Truncated: dropped}, nil
 }

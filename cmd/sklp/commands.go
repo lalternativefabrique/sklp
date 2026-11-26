@@ -29,7 +29,7 @@ func rootCommand() cli.Command {
 			runCommand(),
 			{
 				Name:    "dev",
-				Short:   "Run a stack's local dev environment (.sklp/<stack>/dev.yaml); `dev forward <stack> <svc>` opens a service port on localhost",
+				Short:   "Run a stack's local dev environment (.sklp/<stack>/dev.yaml); `dev ls` / `dev logs <stack>` / `dev down <stack>` inspect and stop it, `dev forward <stack> <svc>` opens a service port on localhost",
 				RawArgs: true,
 				Run: func(ctx context.Context, args cli.Args) int {
 					return devstack.Main(args.Passthrough())

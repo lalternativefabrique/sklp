@@ -7,26 +7,27 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/lalternativefabrique/sklp/cmd/sklp/internal/mcpnode"
+	"github.com/lalternativefabrique/sklp/cmd/sklp/internal/sklpmcp"
 	"github.com/lalternativefabrique/sklp/internal/cli"
 )
 
 func mcpCommand() cli.Command {
 	return cli.Command{
 		Name:  "mcp",
-		Short: "Serve a deploy context's node to an AI agent over MCP (stdio)",
-		Long: "Starts a Model Context Protocol server on stdin/stdout that inspects and deploys to the node of one deploy context,\n" +
-			"with the access `sklp deploy -context <name>` has. Declare it in the agent's MCP config, e.g. .mcp.json:\n\n" +
+		Short: "Serve sklp to an AI agent over MCP (stdio): dev stacks, spaces, pipelines, and a node with -context",
+		Long: "Starts a Model Context Protocol server on stdin/stdout. It drives this machine's dev stacks (dev_*), spaces (space_*)\n" +
+			"and pipelines (run_pipeline, job_*); with -context it also pilots that deploy context's node (deploy_*), with the access\n" +
+			"`sklp deploy -context <name>` has. Declare it in the agent's MCP config, e.g. .mcp.json:\n\n" +
 			`  {"mcpServers": {"sklp": {"command": "sklp", "args": ["mcp", "-context", "demo"]}}}` + "\n\n" +
-			"-read-only leaves out apply_stack, restart_service, run_job and delete_space.",
+			"-read-only serves only the tools that read.",
 		Flags: []cli.Flag{
-			{Name: "context", Type: cli.StringFlag, Usage: "deploy context to serve (required; the active context is never assumed)"},
-			{Name: "read-only", Type: cli.BoolFlag, Usage: "expose only the tools that read the node"},
+			{Name: "context", Type: cli.StringFlag, Usage: "deploy context whose node the deploy_* tools pilot (without it none are served; the active context is never assumed)"},
+			{Name: "read-only", Type: cli.BoolFlag, Usage: "serve only the tools that read"},
 		},
 		Run: func(ctx context.Context, args cli.Args) int {
 			ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			err := mcpnode.Run(ctx, mcpnode.Options{
+			err := sklpmcp.Run(ctx, sklpmcp.Options{
 				Context:  args.String("context"),
 				ReadOnly: args.Bool("read-only"),
 				Version:  version,

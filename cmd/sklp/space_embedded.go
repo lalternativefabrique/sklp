@@ -241,6 +241,7 @@ func spaceLsCommand() cli.Command {
 	return cli.Command{
 		Name:  "ls",
 		Short: "List all spaces (running or stopped)",
+		Flags: []cli.Flag{jsonFlag},
 		Run: func(ctx context.Context, args cli.Args) int {
 			reg, err := newSpaceRegistry()
 			if err != nil {
@@ -251,6 +252,9 @@ func spaceLsCommand() cli.Command {
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "sklp space ls:", err)
 				return 1
+			}
+			if args.Bool("json") {
+				return writeJSON(os.Stdout, "sklp space ls", infos)
 			}
 			renderSpaceList(os.Stdout, infos)
 			return 0
@@ -264,6 +268,7 @@ func spaceGetCommand() cli.Command {
 		Name:        "get",
 		Short:       "Show one space's detail",
 		Positionals: []cli.Positional{{Name: "name", Required: true, Complete: "space"}},
+		Flags:       []cli.Flag{jsonFlag},
 		Run: func(ctx context.Context, args cli.Args) int {
 			name, ok := firstPositional(args)
 			if !ok {
@@ -283,6 +288,9 @@ func spaceGetCommand() cli.Command {
 				}
 				fmt.Fprintln(os.Stderr, "sklp space get:", err)
 				return 1
+			}
+			if args.Bool("json") {
+				return writeJSON(os.Stdout, "sklp space get", info)
 			}
 			renderSpaceDetail(os.Stdout, info)
 			return 0
