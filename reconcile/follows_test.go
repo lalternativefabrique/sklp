@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	imagedomain "github.com/lalternativefabrique/sklp/reconcile/imageupdate/domain"
 )
 
 func openTestStores(t *testing.T) (*Stores, string) {
@@ -131,5 +133,26 @@ func TestNormalizeFollowNeverEchoesACredential(t *testing.T) {
 		if err == nil || strings.Contains(err.Error(), "SECRET") {
 			t.Errorf("NormalizeFollow(%q) err = %v: must refuse without echoing the credential", repo, err)
 		}
+	}
+}
+
+func TestRunnerGivesEachRepoItsOwnScopeAndDropsTheSharedOne(t *testing.T) {
+	stores, cache := openTestStores(t)
+	ctx := context.Background()
+	node := &LocalNode{Name: "n1", ControlURL: "https://127.0.0.1:6464", Token: "t"}
+
+	legacy := &imagedomain.Watch{ID: "w-legacy", StackID: "n1", Name: "old", Service: "web", ImageRepo: "docker.io/x/y", TagPattern: imagedomain.DefaultTagPattern}
+	if err := stores.Watches.Save(ctx, legacy); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = stores.Follows.Add(ctx, Follow{Repo: "https://github.com/moi/blog"})
+	r := NewRunner(stores, node, nil, cache, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r.Targets(ctx)
+
+	if left, _ := stores.Watches.FindByStackID(ctx, "n1"); len(left) != 0 {
+		t.Fatalf("a watch under the shared scope would keep rolling: %+v", left)
+	}
+	if got := string(RepoScope(node, "blog")); got != "n1/blog" {
+		t.Fatalf("RepoScope = %q", got)
 	}
 }

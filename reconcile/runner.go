@@ -18,8 +18,9 @@ type Runner struct {
 	cacheRoot string
 	log       *slog.Logger
 
-	mu    sync.Mutex
-	built map[string]builtTarget
+	mu     sync.Mutex
+	built  map[string]builtTarget
+	purged bool
 }
 
 type builtTarget struct {
@@ -60,6 +61,9 @@ func (r *Runner) Targets(ctx context.Context) []Target {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if !r.purged {
+		r.purgeNodeScope(ctx)
+	}
 	out := make([]Target, 0, len(wanted))
 	for _, t := range wanted {
 		branch := t.Branch
@@ -73,7 +77,7 @@ func (r *Runner) Targets(ctx context.Context) []Target {
 				Repo:        t.Name,
 				Branch:      branch,
 				Source:      mirror,
-				Reconcilers: BuildReconcilers(r.stores, r.node, mirror, nil),
+				Reconcilers: BuildRepoReconcilers(r.stores, r.node, mirror, nil, t.Name),
 			}}
 			r.built[t.Name] = b
 		}
@@ -85,4 +89,33 @@ func (r *Runner) Targets(ctx context.Context) []Target {
 		}
 	}
 	return out
+}
+
+// purgeNodeScope drops the records kept under the node-wide scope every repo
+// shared before each got its own. Left in place, a watch there would keep
+// rolling alongside the one its repo now syncs under its own scope.
+func (r *Runner) purgeNodeScope(ctx context.Context) {
+	legacy := string(NodeScope(r.node.Name))
+	watches, werr := r.stores.Watches.FindByStackID(ctx, legacy)
+	deployments, derr := r.stores.Deployments.FindByStackID(ctx, legacy)
+	if werr != nil || derr != nil {
+		r.log.Warn("reconcile: cannot read the shared-scope records yet", "watches", werr, "deployments", derr)
+		return
+	}
+	for _, w := range watches {
+		if err := r.stores.Watches.Delete(ctx, w.ID); err != nil {
+			r.log.Warn("reconcile: cannot drop a shared-scope watch", "watch", w.Name, "error", err)
+			return
+		}
+	}
+	for _, d := range deployments {
+		if err := r.stores.Deployments.Delete(ctx, d.ID); err != nil {
+			r.log.Warn("reconcile: cannot drop a shared-scope deployment", "space", d.Space, "error", err)
+			return
+		}
+	}
+	if len(watches)+len(deployments) > 0 {
+		r.log.Info("reconcile: moved to per-repo scopes", "dropped_watches", len(watches), "dropped_deployments", len(deployments))
+	}
+	r.purged = true
 }
