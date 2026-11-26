@@ -82,3 +82,21 @@ func TestParseExecArgsEmptyCmdDefaultsToSh(t *testing.T) {
 		t.Fatalf("defaulted cmd = %v, want [sh]", cmd)
 	}
 }
+
+func TestParseExecArgsTargetsANamedContext(t *testing.T) {
+	flags, svc, cmd, err := parseExecArgs([]string{"-context", "demo", "-config", "/tmp/shop.yaml", "web", "-space", "prod", "--", "id"})
+	if err != nil {
+		t.Fatalf("parseExecArgs: %v", err)
+	}
+	if svc != "web" || !sameCmd(cmd, []string{"id"}) || flags.space != "prod" {
+		t.Fatalf("got svc=%q cmd=%v space=%q", svc, cmd, flags.space)
+	}
+	if flags.context != "demo" || flags.configFile != "/tmp/shop.yaml" {
+		t.Fatalf("context=%q config=%q, want demo and /tmp/shop.yaml", flags.context, flags.configFile)
+	}
+
+	flags, _, _, err = parseExecArgs([]string{"web", "-context=demo", "sh"})
+	if err != nil || flags.context != "demo" {
+		t.Fatalf("-context=demo after the service: context=%q err=%v", flags.context, err)
+	}
+}
