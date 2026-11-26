@@ -16,14 +16,14 @@ type fakeDeathWatcher struct {
 	watched map[string]int // id -> pid registered via Watch
 	codes   map[int]int    // pid -> exit code (default 0)
 
-	deathCh chan string
+	deathCh chan Death
 }
 
 func newFakeDeathWatcher() *fakeDeathWatcher {
 	return &fakeDeathWatcher{
 		watched: make(map[string]int),
 		codes:   make(map[int]int),
-		deathCh: make(chan string, 64),
+		deathCh: make(chan Death, 64),
 	}
 }
 
@@ -40,7 +40,7 @@ func (f *fakeDeathWatcher) Unwatch(id string) {
 	f.mu.Unlock()
 }
 
-func (f *fakeDeathWatcher) Deaths() <-chan string { return f.deathCh }
+func (f *fakeDeathWatcher) Deaths() <-chan Death { return f.deathCh }
 
 func (f *fakeDeathWatcher) ExitCode(pid int) (int, bool) {
 	f.mu.Lock()
@@ -59,14 +59,23 @@ func (f *fakeDeathWatcher) Close()                    {}
 
 // requeueDeath re-delivers id (the fake's ExitCode is always known, so onDeath
 // never actually requeues in tests; provided to satisfy the interface).
-func (f *fakeDeathWatcher) requeueDeath(id string, _ int) {
-	go func() { f.deathCh <- id }()
+func (f *fakeDeathWatcher) requeueDeath(id string, pid int) {
+	go func() { f.deathCh <- Death{ID: id, PID: pid} }()
 }
 
 // SimulateDeath causes id to appear dead — triggers the agent's onDeath path
 // exactly as a real pidfd POLLIN would.
 func (f *fakeDeathWatcher) SimulateDeath(id string) {
-	f.deathCh <- id
+	f.mu.Lock()
+	pid := f.watched[id]
+	f.mu.Unlock()
+	f.deathCh <- Death{ID: id, PID: pid}
+}
+
+// SimulateDeathOf delivers the death of a specific pid under id, the way a
+// previous run's pidfd fires after the instance was relaunched.
+func (f *fakeDeathWatcher) SimulateDeathOf(id string, pid int) {
+	f.deathCh <- Death{ID: id, PID: pid}
 }
 
 // SetExitCode configures the exit code ExitCode() returns for pid. Call before

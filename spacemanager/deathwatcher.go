@@ -16,6 +16,14 @@ import (
 // channels driven by the test via SimulateDeath. This seam is what lets the
 // reconciliation core be tested without spawning real processes — the same
 // pattern K8s uses by abstracting the API client.
+// Death is one watched process exiting. The pid matters: an id is reused by
+// the next run of the same instance, and a death read after that relaunch
+// belongs to the previous run.
+type Death struct {
+	ID  string
+	PID int
+}
+
 type DeathWatcher interface {
 	// Watch registers pid under id for death notification. Returns an error if
 	// the OS rejects the watch (e.g. pidfd_open fails); the caller schedules a
@@ -26,9 +34,9 @@ type DeathWatcher interface {
 	// when a retired/removed instance no longer needs to be watched.
 	Unwatch(id string)
 
-	// Deaths returns a channel that receives instance ids as they die. The
-	// channel is never closed; the consumer loops until ctx is cancelled.
-	Deaths() <-chan string
+	// Deaths returns a channel that receives each death with the pid that died.
+	// The channel is never closed; the consumer loops until ctx is cancelled.
+	Deaths() <-chan Death
 
 	// ExitCode returns the reaped exit code for pid. Reads without consuming, so
 	// a re-deferred death can read the same code again; the entry is released by
@@ -134,7 +142,7 @@ type pidfdWatcher struct {
 	pids map[string]int // id -> pid (for reap lookup)
 
 	wakeFD  int
-	deathCh chan string
+	deathCh chan Death
 
 	sigCh chan os.Signal
 	once  sync.Once // guards Close
@@ -147,7 +155,7 @@ func newPidfdWatcher(logger *log.Logger) *pidfdWatcher {
 		logger:  logger,
 		fds:     make(map[string]int),
 		pids:    make(map[string]int),
-		deathCh: make(chan string, 64),
+		deathCh: make(chan Death, 64),
 		sigCh:   make(chan os.Signal, 1),
 		done:    make(chan struct{}),
 		wakeFD:  -1,
@@ -238,13 +246,13 @@ func (w *pidfdWatcher) requeueDeath(id string, pid int) {
 		w.Wake() // prompt drainReap to harvest the exit code
 		time.Sleep(time.Millisecond)
 		select {
-		case w.deathCh <- id:
+		case w.deathCh <- Death{ID: id, PID: pid}:
 		case <-w.done:
 		}
 	}()
 }
 
-func (w *pidfdWatcher) Deaths() <-chan string { return w.deathCh }
+func (w *pidfdWatcher) Deaths() <-chan Death { return w.deathCh }
 
 // Wake nudges pollLoop out of a blocking poll(2) by making the wake eventfd
 // readable. It holds mu for the write: Close() concurrently closes wakeFD and
@@ -320,7 +328,7 @@ func (w *pidfdWatcher) pollLoop(ctx context.Context) {
 		default:
 		}
 
-		pfds, ids := w.buildPollSet()
+		pfds, ids, pids := w.buildPollSet()
 		timeout := -1 // block until a pidfd fires or we are woken
 
 		n, err := unix.Poll(pfds, timeout)
@@ -357,7 +365,7 @@ func (w *pidfdWatcher) pollLoop(ctx context.Context) {
 		for i, pfd := range pfds[1:] {
 			if pfd.Revents&unix.POLLIN != 0 {
 				select {
-				case w.deathCh <- ids[i]:
+				case w.deathCh <- Death{ID: ids[i], PID: pids[i]}:
 				case <-w.done:
 					return
 				case <-ctx.Done():
@@ -368,15 +376,17 @@ func (w *pidfdWatcher) pollLoop(ctx context.Context) {
 	}
 }
 
-func (w *pidfdWatcher) buildPollSet() ([]unix.PollFd, []string) {
+func (w *pidfdWatcher) buildPollSet() ([]unix.PollFd, []string, []int) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	pfds := make([]unix.PollFd, 0, len(w.fds)+1)
 	pfds = append(pfds, unix.PollFd{Fd: int32(w.wakeFD), Events: unix.POLLIN})
 	ids := make([]string, 0, len(w.fds))
+	pids := make([]int, 0, len(w.fds))
 	for id, fd := range w.fds {
 		pfds = append(pfds, unix.PollFd{Fd: int32(fd), Events: unix.POLLIN})
 		ids = append(ids, id)
+		pids = append(pids, w.pids[id])
 	}
-	return pfds, ids
+	return pfds, ids, pids
 }

@@ -131,9 +131,9 @@ func TestPidfdWatcher_DeliversDeathToReader(t *testing.T) {
 	w.Wake()
 
 	select {
-	case id := <-w.Deaths():
-		if id != "svc-1" {
-			t.Fatalf("death id = %q, want svc-1", id)
+	case d := <-w.Deaths():
+		if d.ID != "svc-1" {
+			t.Fatalf("death id = %q, want svc-1", d.ID)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("no death delivered")

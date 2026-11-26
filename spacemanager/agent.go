@@ -589,8 +589,8 @@ func (a *Agent) eventLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case id := <-a.watcher.Deaths():
-			a.onDeath(id)
+		case d := <-a.watcher.Deaths():
+			a.onDeath(d)
 			a.reconcile(ctx)
 		case <-a.wakeCh:
 			a.reconcile(ctx)
@@ -644,10 +644,11 @@ func (a *Agent) nextDeadlineTimer(ctx context.Context) <-chan time.Time {
 // dead instance must never be a routing target), close its pidfd, resolve the
 // exit code, reset backoff if it ran long enough, and schedule a restart. A
 // retired instance (being replaced by a rollout) is NOT restarted.
-func (a *Agent) onDeath(id string) {
+func (a *Agent) onDeath(d Death) {
+	id := d.ID
 	a.mu.Lock()
 	inst := a.instances[id]
-	if inst == nil || inst.pid == 0 {
+	if inst == nil || inst.pid == 0 || (d.PID != 0 && d.PID != inst.pid) {
 		a.mu.Unlock()
 		return
 	}
