@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 )
 
@@ -122,4 +123,13 @@ func names(ts []Target) string {
 		out += t.Repo
 	}
 	return out
+}
+
+func TestNormalizeFollowNeverEchoesACredential(t *testing.T) {
+	for _, repo := range []string{"https://ghp_SECRET@github.com/moi/hello", "https://x:ghp_SECRET@github.com/moi/hello", "https://ghp_SECRET@github.com"} {
+		_, err := NormalizeFollow(Follow{Repo: repo})
+		if err == nil || strings.Contains(err.Error(), "SECRET") {
+			t.Errorf("NormalizeFollow(%q) err = %v: must refuse without echoing the credential", repo, err)
+		}
+	}
 }

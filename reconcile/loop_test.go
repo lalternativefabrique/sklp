@@ -234,3 +234,23 @@ func TestTargetLoopRunsEachRepoWithItsOwnReconcilers(t *testing.T) {
 		t.Fatalf("a repo dropped then followed again must be applied again: %v", got)
 	}
 }
+
+func TestResyncAppliesAgainWithNoNewCommit(t *testing.T) {
+	rec := &recorder{}
+	opts := quiet()
+	opts.Interval = time.Hour
+	opts.Resync = 30 * time.Millisecond
+	loop := NewLoop([]Target{target(&stubSource{refs: []string{"sha-1"}})}, []Reconciler{rec}, opts)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { _ = loop.Run(ctx); close(done) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for len(rec.seen()) < 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if got := rec.seen(); len(got) < 3 {
+		t.Fatalf("the same commit must be re-applied on every resync, saw %v", got)
+	}
+}
