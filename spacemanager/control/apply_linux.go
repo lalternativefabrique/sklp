@@ -87,6 +87,9 @@ func handleApply(space string, sup Supervisor, body io.Reader) (ApplyResult, err
 				space, owner, spec.Meta.Stack)
 		}
 	}
+	if err := hostServedElsewhere(space, spec.Meta.Routes); err != nil {
+		return ApplyResult{}, err
+	}
 	for i := range spec.Services {
 		spec.Services[i].DeclaredImage = spec.Services[i].Image
 	}
@@ -418,4 +421,40 @@ func jobsFirst(svc spacemanager.Service) int {
 		return 0
 	}
 	return 1
+}
+
+// hostServedElsewhere refuses a route whose host another space of this node
+// already routes. The front door keys on the host alone, so two spaces naming
+// one host left the request to whichever sorted last, with nothing said. One
+// space may still split a host across paths. --force does not lift it: it
+// adopts a space, it does not let two spaces share a host.
+func hostServedElsewhere(space string, routes []spacemanager.ResolvedRoute) error {
+	want := map[string]bool{}
+	for _, r := range routes {
+		if r.Host != "" {
+			want[strings.ToLower(r.Host)] = true
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	others, err := ListPersistedSpaces()
+	if err != nil {
+		return nil
+	}
+	for _, other := range others {
+		if other == space {
+			continue
+		}
+		_, meta, err := ReadPersistedManifest(other)
+		if err != nil {
+			continue
+		}
+		for _, r := range meta.Routes {
+			if host := strings.ToLower(r.Host); want[host] {
+				return fmt.Errorf("host %q is already routed by space %q on this node; a host is served by one space, so pick another host or remove it from %q first", host, other, other)
+			}
+		}
+	}
+	return nil
 }

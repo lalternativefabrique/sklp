@@ -828,3 +828,44 @@ func TestApplyUnseenGitTagResetsJournal(t *testing.T) {
 		t.Fatalf("web = image %q journal %v, want img:9 with an empty journal", got.Image, got.RolledImages)
 	}
 }
+
+func TestApplyRefusesAHostAnotherSpaceRoutes(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	taken := spacemanager.SpaceMeta{Name: "shop", Stack: "shop", Routes: []spacemanager.ResolvedRoute{{Service: "web", Host: "app.example.org"}}}
+	if err := persistManifest(applySpec{Services: []spacemanager.Service{{Name: "web", Image: "img:1", Port: 80}}, Meta: taken}); err != nil {
+		t.Fatal(err)
+	}
+
+	sup := &fakeSupervisor{live: map[string]spacemanager.Service{}, differs: map[string]bool{}, routesChanged: true}
+	c, cancel := serveFake(t, "blog", sup)
+	defer cancel()
+	apply := func(force bool, routes ...spacemanager.ResolvedRoute) error {
+		spec, _ := MarshalApplySpec([]spacemanager.Service{{Name: "web", Image: "img:1", Port: 80}},
+			spacemanager.SpaceMeta{Name: "blog", Stack: "blog", Routes: routes})
+		var err error
+		if force {
+			_, err = c.ApplyForce(context.Background(), spec)
+		} else {
+			_, err = c.Apply(context.Background(), spec)
+		}
+		return err
+	}
+
+	for _, force := range []bool{false, true} {
+		err := apply(force, spacemanager.ResolvedRoute{Service: "web", Host: "APP.example.org"})
+		if err == nil || !strings.Contains(err.Error(), `space "shop"`) {
+			t.Fatalf("force=%v: a host space shop routes must be refused, naming shop: %v", force, err)
+		}
+	}
+	if len(sup.added) != 0 {
+		t.Fatalf("a refused apply touched the supervisor: %v", sup.added)
+	}
+
+	split := []spacemanager.ResolvedRoute{{Service: "web", Host: "blog.example.org"}, {Service: "web", Host: "blog.example.org", Path: "/api"}}
+	if err := apply(false, split...); err != nil {
+		t.Fatalf("a free host, split across paths in one space: %v", err)
+	}
+	if err := apply(false, split...); err != nil {
+		t.Fatalf("re-applying the space that holds the host: %v", err)
+	}
+}
