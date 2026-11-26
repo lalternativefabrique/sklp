@@ -37,7 +37,7 @@ func (c *Client) ListTags(ctx context.Context, repo, username, secret string) ([
 	if err != nil {
 		return nil, err
 	}
-	endpoint := c.baseScheme + "://" + host + "/v2/" + path + "/tags/list"
+	endpoint := c.baseScheme + "://" + apiHost(host) + "/v2/" + path + "/tags/list"
 
 	resp, err := c.get(ctx, endpoint, "")
 	if err != nil {
@@ -195,4 +195,14 @@ func splitRepo(repo string) (host, path string, err error) {
 		return "", "", fmt.Errorf("image repository %q must name a registry host", repo)
 	}
 	return host, path, nil
+}
+
+// apiHost is where a registry serves its API. Docker Hub is the one that does
+// not answer on the name images are written with: docker.io serves a web page,
+// the registry is registry-1.docker.io.
+func apiHost(host string) string {
+	if host == "docker.io" || host == "index.docker.io" {
+		return "registry-1.docker.io"
+	}
+	return host
 }
