@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lalternativefabrique/sklp/reconcile/deployconfig/nodeapi"
@@ -40,8 +42,33 @@ func (c localCredentials) refresh(w *domain.Watch) *domain.Watch {
 	return &fresh
 }
 
+// Roll refuses a watch whose space another repo owns: a repo's watches roll
+// its own services, never the ones a neighbour deployed on the same node.
 func (c localCredentials) Roll(ctx context.Context, w *domain.Watch, tag string) (string, error) {
-	return c.inner.Roll(ctx, c.refresh(w), tag)
+	fresh := c.refresh(w)
+	if repo := c.repoOf(w); repo != "" {
+		owner, err := c.inner.SpaceOwner(ctx, fresh)
+		if err != nil {
+			return "", err
+		}
+		if ownerRepo, _, scoped := strings.Cut(owner, "/"); !scoped || ownerRepo != repo {
+			return "", fmt.Errorf("space %q belongs to %q, not to repo %q whose watch %q asked the roll", w.NodeSpace, owner, repo, w.Name)
+		}
+	}
+	return c.inner.Roll(ctx, fresh, tag)
+}
+
+// repoOf answers the repo a watch was synced from, when it lives under a
+// per-repo scope.
+func (c localCredentials) repoOf(w *domain.Watch) string {
+	if c.local == nil {
+		return ""
+	}
+	repo, ok := strings.CutPrefix(w.StackID, c.local.Name+"/")
+	if !ok {
+		return ""
+	}
+	return repo
 }
 
 func (c localCredentials) Rollouts(ctx context.Context, w *domain.Watch) ([]domain.NodeRollout, error) {

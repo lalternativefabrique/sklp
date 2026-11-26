@@ -824,3 +824,22 @@ func appliedDeployment(t *testing.T, stackID, space string) *domain.Deployment {
 	d.RecordHealth(true, "", time.Now())
 	return d
 }
+
+func TestHandleTagsTheSpaceWithItsOwningRepo(t *testing.T) {
+	stack := domain.StackOf(manifestPath)
+	for _, c := range []struct {
+		owner, want string
+	}{
+		{"", stack},
+		{"moi-blog", "moi-blog/" + stack},
+	} {
+		applier := &stubApplier{result: domain.ApplyResult{Result: "created"}}
+		h := New(newStubRepo(), rootFetcher(validYAML), stubNodes{node: testNode()}, staticDecrypter{token: "s3cret"}, applier, newStubState(), nil)
+		if err := h.Handle(context.Background(), Command{StackID: "s1", Repo: "acme/widgets", Ref: "abc123", Owner: c.owner}); err != nil {
+			t.Fatalf("Handle: %v", err)
+		}
+		if applier.lastTgt.Stack != c.want {
+			t.Errorf("owner %q: stack tag %q, want %q", c.owner, applier.lastTgt.Stack, c.want)
+		}
+	}
+}

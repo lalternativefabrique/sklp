@@ -26,10 +26,17 @@ type NodeScope string
 type DeployReconciler struct {
 	handler *deployapply.Handler
 	scope   NodeScope
+	owner   string
 }
 
 func NewDeployReconciler(handler *deployapply.Handler, scope NodeScope) *DeployReconciler {
 	return &DeployReconciler{handler: handler, scope: scope}
+}
+
+// OwnedBy tags every space this reconciler applies as the given repo's.
+func (r *DeployReconciler) OwnedBy(repo string) *DeployReconciler {
+	r.owner = repo
+	return r
 }
 
 // Reconcile implements Reconciler.
@@ -43,6 +50,7 @@ func (r *DeployReconciler) Reconcile(ctx context.Context, repo, ref string) erro
 		StackID: string(r.scope),
 		Repo:    repo,
 		Ref:     ref,
+		Owner:   r.owner,
 	})
 }
 

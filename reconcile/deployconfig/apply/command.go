@@ -15,4 +15,9 @@ type Command struct {
 	Repo      string // "owner/name"
 	Ref       string // the pushed commit SHA
 	GitToken  string
+	// Owner, when set, qualifies the stack a space is tagged with as
+	// <Owner>/<stack>, so two repos both declaring .sklp/web/ cannot take
+	// each other's space. The core leaves it empty: its spaces keep the
+	// bare stack name they were deployed under.
+	Owner string
 }

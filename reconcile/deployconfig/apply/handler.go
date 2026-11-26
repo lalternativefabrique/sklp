@@ -262,7 +262,7 @@ func (h *Handler) reconcileOne(ctx context.Context, cmd Command, decl domain.Roo
 		Space:         manifest.Space,
 		Token:         token,
 		CAFingerprint: node.CAFingerprint,
-		Stack:         domain.StackOf(decl.Path),
+		Stack:         ownedStack(cmd.Owner, domain.StackOf(decl.Path)),
 	}
 
 	result, err := h.applier.Apply(ctx, target, manifest)
@@ -362,4 +362,11 @@ func (h *Handler) credentialFor(ctx context.Context, stackID, nodeName, nodeID s
 		return h.nodes.Credential(ctx, stackID, nodeName)
 	}
 	return h.nodes.CredentialByID(ctx, stackID, nodeID)
+}
+
+func ownedStack(owner, stack string) string {
+	if owner == "" || stack == "" {
+		return stack
+	}
+	return owner + "/" + stack
 }

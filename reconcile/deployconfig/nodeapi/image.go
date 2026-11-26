@@ -113,6 +113,25 @@ func (r *ControlRoller) Roll(ctx context.Context, w *domain.Watch, tag string) (
 	return domain.RollResultApplied, nil
 }
 
+// SpaceOwner reads the stack the watch's space was deployed under.
+func (r *ControlRoller) SpaceOwner(ctx context.Context, w *domain.Watch) (string, error) {
+	resp, err := r.do(ctx, w, http.MethodGet, spacedRoute(w.NodeSpace, "/v1/manifest"), nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("node %s: manifest of space %q: status %d", w.NodeServer, w.NodeSpace, resp.StatusCode)
+	}
+	var m struct {
+		Stack string `json:"stack"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return "", fmt.Errorf("decode manifest: %w", err)
+	}
+	return m.Stack, nil
+}
+
 func (r *ControlRoller) state(ctx context.Context, w *domain.Watch) (imageStateResponse, error) {
 	resp, err := r.do(ctx, w, http.MethodGet, spacedRoute(w.NodeSpace, "/v1/state"), nil)
 	if err != nil {

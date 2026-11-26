@@ -182,8 +182,23 @@ func Describe(cfg *Config, log *slog.Logger) {
 // "${VAR}" to a container.
 // fetcher reads the declarations out of the mirror the loop keeps for this
 // repo, which is the same object the Target already holds.
+// RepoScope is the scope one repo's deployments and watches live under on
+// this node: each repo syncs, and prunes, only its own.
+func RepoScope(node *LocalNode, repo string) NodeScope {
+	return NodeScope(node.Name + "/" + repo)
+}
+
+// BuildRepoReconcilers is BuildReconcilers for one repo among several: its
+// spaces are tagged as the repo's and its records kept apart from the others'.
+func BuildRepoReconcilers(stores *Stores, node *LocalNode, fetcher source.FileFetcher, secrets deployconfigdomain.Resolver, repo string) []Reconciler {
+	return buildReconcilers(stores, node, fetcher, secrets, RepoScope(node, repo), repo)
+}
+
 func BuildReconcilers(stores *Stores, node *LocalNode, fetcher source.FileFetcher, secrets deployconfigdomain.Resolver) []Reconciler {
-	scope := NodeScope(node.Name)
+	return buildReconcilers(stores, node, fetcher, secrets, NodeScope(node.Name), "")
+}
+
+func buildReconcilers(stores *Stores, node *LocalNode, fetcher source.FileFetcher, secrets deployconfigdomain.Resolver, scope NodeScope, owner string) []Reconciler {
 	deploy := deployapply.New(
 		stores.Deployments,
 		fetcher,
@@ -195,7 +210,7 @@ func BuildReconcilers(stores *Stores, node *LocalNode, fetcher source.FileFetche
 	)
 	watches := imagesync.New(stores.Watches, fetcher, nodeWatchDirectory{node}, PlainToken{})
 	return []Reconciler{
-		NewDeployReconciler(deploy, scope),
+		NewDeployReconciler(deploy, scope).OwnedBy(owner),
 		NewWatchReconciler(watches, scope),
 	}
 }
