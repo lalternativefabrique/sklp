@@ -35,6 +35,8 @@ func reconcileCommand() cli.Command {
 			"moved. The node reaches Git outbound and nothing reaches the node, so one behind\n" +
 			"NAT works the same as one with a public address — a push is applied within the\n" +
 			"poll interval rather than in seconds, which is the trade.\n\n" +
+			"The image watches those repos declare are polled too: a newer tag in a\n" +
+			"watched registry is rolled onto this node with no core involved.\n\n" +
 			"reconcile.yaml lives beside the control credentials (XDG_CONFIG_HOME/sklp).\n" +
 			"With no file, or no targets in it, this node pulls nothing and only serves what\n" +
 			"an operator pushed with `sklp deploy`.",
@@ -114,6 +116,9 @@ func reconcileCommand() cli.Command {
 			signal.Ignore(unix.SIGHUP)
 			runCtx, stop := signal.NotifyContext(ctx, unix.SIGINT, unix.SIGTERM)
 			defer stop()
+
+			poller := reconcile.StartImageRolling(runCtx, stores, 0)
+			defer poller.Stop()
 
 			if err := loop.Run(runCtx); err != nil {
 				fmt.Fprintf(os.Stderr, "sklet reconcile: %v\n", err)
