@@ -43,7 +43,7 @@ Verbs:
   run         Run a pipeline from .sklp/pipelines/<name>.yaml (or -file <path>)
   dev         Run a stack's local dev environment (.sklp/<stack>/dev.yaml) —
               long-running services. 'sklp dev' with no stack lists the choices;
-              'sklp dev down' stops a stack started in another terminal.
+              'sklp dev down <stack>' stops it from another terminal.
   space       Manage closed environments built from .sklp/space.yaml (base image
               + toolchain + packages): 'space up <name>' creates + launches a
               detached space and drops you into a shell; 'space ls' / 'get
@@ -102,7 +102,8 @@ Examples:
   sklp run -file path/to/foo.yaml
   sklp dev                       # list the dev-capable stacks
   sklp dev core                  # run .sklp/core/dev.yaml
-  sklp dev down                  # stop the running dev stack (any terminal)
+  sklp dev core -d               # same, in the background once ready
+  sklp dev down core             # stop it from any terminal (volumes kept)
   sklp space up dev              # create + launch a space named 'dev', open a shell
   sklp space ls                  # list all spaces
   sklp space exec dev -- go test ./...  # one-shot command in the 'dev' space

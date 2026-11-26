@@ -123,3 +123,17 @@ func TestDevMain_UnknownStack(t *testing.T) {
 		t.Fatalf("stderr missing the suggestion list:\n%s", errOut)
 	}
 }
+
+func TestDevMain_StackThenDown_SuggestsDevDown(t *testing.T) {
+	repo := t.TempDir()
+	writeDevStack(t, repo, "messag")
+
+	var code int
+	_, errOut := captureStd(t, func() { code = Main([]string{"-repo", repo, "messag", "down"}) })
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errOut, "sklp dev down messag") {
+		t.Fatalf("stderr missing the suggestion:\n%s", errOut)
+	}
+}

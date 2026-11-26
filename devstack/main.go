@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lalternativefabrique/sklp/internal/layout"
@@ -49,6 +50,7 @@ func Main(args []string) int {
 	validate := fs.Bool("validate", false, "parse and validate the devstack YAML without launching anything")
 	check := fs.Bool("check", false, "with --validate: report which auto-fixes would apply, but do not write the file")
 	only := fs.String("only", "", "comma-separated subset of services to launch (plus their transitive deps)")
+	detach := fs.Bool("d", false, "run the stack in the background; stop it with `sklp dev down <stack>`")
 
 	// Parse flags then a trailing positional, interleaved: Go's flag stops at
 	// the first non-flag, so we parse, take the leading residual as <stack>,
@@ -101,6 +103,10 @@ func Main(args []string) int {
 		return 2
 	}
 
+	if *detach && !*validate {
+		return runDetached(repoAbs, stack, args)
+	}
+
 	var onlyNames []string
 	if *only != "" {
 		for _, s := range strings.Split(*only, ",") {
@@ -131,23 +137,42 @@ func Main(args []string) int {
 	return 0
 }
 
-// parseWithStack parses fs while tolerating a single positional <stack> token
-// anywhere among the flags. flag.Parse stops at the first non-flag, so we parse
-// in segments: parse, capture the first residual non-flag as the stack, parse
-// the rest, repeat. This correctly skips flag VALUES (`-repo <dir>` does not
-// make <dir> the stack) because fs already consumed them. Empty stack = none.
-func parseWithStack(fs *flag.FlagSet, args []string) (stack string, err error) {
+// parsePositionals parses fs while tolerating positional tokens anywhere among
+// the flags. flag.Parse stops at the first non-flag, so we parse in segments:
+// parse, capture the first residual non-flag, parse the rest, repeat. This
+// correctly skips flag VALUES (`-repo <dir>` does not make <dir> a positional)
+// because fs already consumed them.
+func parsePositionals(fs *flag.FlagSet, args []string) ([]string, error) {
+	var positionals []string
 	for {
-		if err = fs.Parse(args); err != nil {
-			return "", err
+		if err := fs.Parse(args); err != nil {
+			return nil, err
 		}
 		rest := fs.Args()
 		if len(rest) == 0 {
-			return stack, nil
+			return positionals, nil
 		}
-		if stack == "" {
-			stack = rest[0] // first bare token is the stack
-		}
-		args = rest[1:] // continue parsing flags that followed the positional
+		positionals = append(positionals, rest[0])
+		args = rest[1:]
 	}
 }
+
+// parseWithStack is parsePositionals for the launcher: the first positional is
+// the stack. A trailing `down` is the `sklp dev <stack> down` slip, rejected
+// so it never silently boots the stack it meant to stop.
+func parseWithStack(fs *flag.FlagSet, args []string) (stack string, err error) {
+	positionals, err := parsePositionals(fs, args)
+	if err != nil {
+		return "", err
+	}
+	if len(positionals) == 0 {
+		return "", nil
+	}
+	if slices.Contains(positionals[1:], "down") {
+		fmt.Fprintf(os.Stderr, "sklp dev: did you mean `sklp dev down %s`?\n", positionals[0])
+		return "", errStackThenDown
+	}
+	return positionals[0], nil
+}
+
+var errStackThenDown = errors.New("stack followed by down")

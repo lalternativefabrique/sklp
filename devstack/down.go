@@ -14,18 +14,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
+
+	"github.com/lalternativefabrique/sklp/internal/layout"
 )
 
-// RunDown is the `sklp dev down` entrypoint. Returns an exit code so
+// RunDown is the `sklp dev down [<stack>]` entrypoint. Returns an exit code so
 // the caller (cmd/sklp) owns process lifecycle, matching Main.
 func RunDown(args []string) int {
 	fs := flag.NewFlagSet("sklp dev down", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	repo := fs.String("repo", ".", "repo root whose dev stack to stop")
 	graceMs := fs.Int("grace-ms", 5000, "milliseconds to wait between SIGTERM and SIGKILL")
-	if err := fs.Parse(args); err != nil {
+	positionals, err := parsePositionals(fs, args)
+	if err != nil {
+		return 2
+	}
+	if len(positionals) > 1 {
+		fmt.Fprintln(os.Stderr, "sklp dev down: takes at most one stack")
 		return 2
 	}
 
@@ -35,24 +43,70 @@ func RunDown(args []string) int {
 		return 2
 	}
 
-	// Stack is "" here: Step 4 wires a `-stack` flag through to scope the
-	// statefile per-stack; until then `down` targets the legacy single-stack
-	// run (devScopeID with no stack folded in).
-	st, err := readState(repoAbs, "")
+	declared, _ := layout.New(repoAbs).StacksFor("dev")
+	running, err := runningStates(repoAbs, append(declared, positionals...))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sklp dev down: %v\n", err)
 		return 1
 	}
+	st, code := pickDownTarget(running, positionals)
 	if st == nil {
-		fmt.Println("sklp dev down: no running dev stack found")
-		return 0
+		return code
 	}
 
-	grace := time.Duration(*graceMs) * time.Millisecond
-	stopState(st, grace)
-	removeState(repoAbs, "")
-	fmt.Println("sklp dev down: stopped")
+	stopState(st, time.Duration(*graceMs)*time.Millisecond)
+	removeState(repoAbs, st.Stack)
+	fmt.Printf("sklp dev down: stopped %s%s\n", stackLabel(st.Stack), spaceSuffix(st.EmbeddedSpace))
 	return 0
+}
+
+// pickDownTarget returns nil with the exit code when there is nothing to stop
+// or the choice is ambiguous.
+func pickDownTarget(running []runState, positionals []string) (*runState, int) {
+	if len(positionals) == 1 {
+		stack := positionals[0]
+		for i := range running {
+			if running[i].Stack == stack {
+				return &running[i], 0
+			}
+		}
+		fmt.Printf("sklp dev down: stack %q is not running in this worktree%s\n", stack, runningSuffix(running))
+		return nil, 0
+	}
+	switch len(running) {
+	case 0:
+		fmt.Println("sklp dev down: no running dev stack found")
+		return nil, 0
+	case 1:
+		return &running[0], 0
+	}
+	fmt.Fprintf(os.Stderr, "sklp dev down: several stacks are running, name one: sklp dev down <stack>%s\n", runningSuffix(running))
+	return nil, 2
+}
+
+func runningSuffix(running []runState) string {
+	if len(running) == 0 {
+		return ""
+	}
+	names := make([]string, len(running))
+	for i, st := range running {
+		names[i] = stackLabel(st.Stack)
+	}
+	return " (running: " + strings.Join(names, ", ") + ")"
+}
+
+func stackLabel(stack string) string {
+	if stack == "" {
+		return "the dev stack"
+	}
+	return stack
+}
+
+func spaceSuffix(space string) string {
+	if space == "" {
+		return ""
+	}
+	return fmt.Sprintf(" (space %s stopped, volumes kept — `sklp space down %s` also deletes them)", space, space)
 }
 
 // stopState replays the recorded teardown. Order mirrors the
