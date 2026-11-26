@@ -2,20 +2,17 @@ package spacemanager
 
 import (
 	"fmt"
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 	"os"
 	"strings"
 
 	"github.com/distribution/reference"
 )
 
-// TrustedRegistriesEnv lists the registry hosts a node pulls from, comma
-// separated (e.g. "rg.fr-par.scw.cloud,docker.io"). Unset means any registry:
-// a node that has not stated a policy keeps working as before.
-const TrustedRegistriesEnv = "SKLP_TRUSTED_REGISTRIES"
-
-// RequireImageDigestEnv, when "1", refuses an image that is not pinned by
-// digest: a tag is a mutable pointer the registry owner can repoint.
-const RequireImageDigestEnv = "SKLP_REQUIRE_IMAGE_DIGEST"
+const (
+	TrustedRegistriesEnv  = wire.TrustedRegistriesEnv
+	RequireImageDigestEnv = wire.RequireImageDigestEnv
+)
 
 // ImagePolicy is what a node accepts in a manifest's image references. It is a
 // node property, never a manifest one — the manifest is the thing being judged.

@@ -1,3 +1,5 @@
+//go:build linux
+
 package control
 
 // tls.go manages the GLOBAL self-signed TLS material for the NETWORK listener.

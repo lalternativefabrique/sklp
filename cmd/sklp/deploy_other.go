@@ -20,15 +20,6 @@ import (
 // so neither has an implementation here. A workstation that runs its builds in
 // a Linux VM relays the invocation there before dispatch reaches these stubs.
 
-func deployCommand() cli.Command {
-	return cli.Command{
-		Name:    "deploy",
-		Short:   "Deploy a stack from .sklp/<stack>/deploy.yaml on a node",
-		RawArgs: true,
-		Run:     func(_ context.Context, _ cli.Args) int { return relayOrNeedsLinux("deploy") },
-	}
-}
-
 func cockpitCommand() cli.Command {
 	return cli.Command{
 		Name:    "cockpit",
@@ -63,12 +54,3 @@ func needsLinuxNode(verb string) int {
 	fmt.Fprintf(os.Stderr, "sklp %s: needs a Linux node (running on %s)\n", verb, runtime.GOOS)
 	return 1
 }
-
-// The deploy transport shims run ahead of dispatch in main; off Linux there is
-// no deploy tree behind them, so they never claim the invocation.
-
-func maybeRunRemote(args []string) (bool, int) { return false, 0 }
-
-func maybeRunRemoteNet(args []string) (bool, int) { return false, 0 }
-
-func maybeRunRemoteDeploy(args []string) (bool, int) { return false, 0 }

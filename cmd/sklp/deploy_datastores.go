@@ -9,8 +9,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/lalternativefabrique/sklp/internal/cli"
-	"github.com/lalternativefabrique/sklp/spacemanager"
 	"github.com/lalternativefabrique/sklp/spacemanager/control"
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 )
 
 func deployDataStoresCommand() cli.Command {
@@ -85,7 +85,7 @@ func nodeSpaces(ctx context.Context, nf *netFlags) ([]string, error) {
 }
 
 func renderDataStores(out *os.File, rows []control.DataStoresResponse) {
-	counts := map[spacemanager.Protection]int{}
+	counts := map[wire.Protection]int{}
 	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
 	fmt.Fprintln(w, "SPACE\tSERVICE\tENGINE\tPROTECTION\tLAST BACKUP\tDETAIL")
 	failed := 0
@@ -100,14 +100,14 @@ func renderDataStores(out *os.File, rows []control.DataStoresResponse) {
 	}
 	w.Flush()
 	fmt.Fprintf(out, "\n%d backed · %d opaque · %d unprotected · %d disposable\n",
-		counts[spacemanager.ProtectionBacked], counts[spacemanager.ProtectionOpaque],
-		counts[spacemanager.ProtectionNone], counts[spacemanager.ProtectionDisposable])
+		counts[wire.ProtectionBacked], counts[wire.ProtectionOpaque],
+		counts[wire.ProtectionNone], counts[wire.ProtectionDisposable])
 	if failed > 0 {
 		fmt.Fprintf(out, "%d store(s) whose last backup FAILED\n", failed)
 	}
 }
 
-func lastBackupCell(o *spacemanager.BackupOutcome) string {
+func lastBackupCell(o *wire.BackupOutcome) string {
 	switch {
 	case o == nil:
 		return "-"

@@ -1,3 +1,5 @@
+//go:build linux
+
 package control
 
 // systemd_runapi.go installs `sklp run --listen` as a systemd --user service.

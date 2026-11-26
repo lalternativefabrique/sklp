@@ -1,44 +1,33 @@
 package spacemanager
 
 import (
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 	"net/url"
 	"path"
 	"slices"
 	"strings"
 )
 
-type DataEngine string
-
-const (
-	EnginePostgres DataEngine = "postgres"
-	EngineRedis    DataEngine = "redis"
-	EngineMySQL    DataEngine = "mysql"
-	EngineMariaDB  DataEngine = "mariadb"
-	EngineMongo    DataEngine = "mongo"
-	EngineNATS     DataEngine = "nats"
-	EngineUnknown  DataEngine = "unknown"
+type (
+	DataEngine = wire.DataEngine
+	Protection = wire.Protection
+	DataStore  = wire.DataStore
 )
 
-// Protection grades what the platform can do for a store's data if the node
-// is lost: nothing, run a backup it cannot read back, or read it back itself.
-type Protection string
-
 const (
-	ProtectionNone       Protection = "none"
-	ProtectionOpaque     Protection = "opaque"
-	ProtectionBacked     Protection = "backed"
-	ProtectionDisposable Protection = "disposable"
-)
+	EnginePostgres = wire.EnginePostgres
+	EngineRedis    = wire.EngineRedis
+	EngineMySQL    = wire.EngineMySQL
+	EngineMariaDB  = wire.EngineMariaDB
+	EngineMongo    = wire.EngineMongo
+	EngineNATS     = wire.EngineNATS
+	EngineUnknown  = wire.EngineUnknown
 
-type DataStore struct {
-	Service    string         `json:"service"`
-	Engine     DataEngine     `json:"engine"`
-	Image      string         `json:"image"`
-	Volumes    []string       `json:"volumes"`
-	Protection Protection     `json:"protection"`
-	Detail     string         `json:"detail"`
-	LastBackup *BackupOutcome `json:"last_backup,omitempty"`
-}
+	ProtectionNone       = wire.ProtectionNone
+	ProtectionOpaque     = wire.ProtectionOpaque
+	ProtectionBacked     = wire.ProtectionBacked
+	ProtectionDisposable = wire.ProtectionDisposable
+)
 
 // engineMarkers are matched against the image's repository name, most
 // specific first: a pgvector or timescale image is a Postgres.

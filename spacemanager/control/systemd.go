@@ -1,9 +1,11 @@
+//go:build linux
+
 package control
 
 import (
 	"fmt"
 	"github.com/lalternativefabrique/sklp/internal/xdg"
-	"github.com/lalternativefabrique/sklp/spacemanager"
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,7 +86,7 @@ func renderUnit(space, selfExe string, envFiles []string) string {
 	if dir := xdg.DataRoot(); dir != "" {
 		b.WriteString(fmt.Sprintf("Environment=%s=%s\n", xdg.DataRootEnv, dir))
 	}
-	for _, env := range []string{spacemanager.TrustedRegistriesEnv, spacemanager.RequireImageDigestEnv} {
+	for _, env := range []string{wire.TrustedRegistriesEnv, wire.RequireImageDigestEnv} {
 		if v := os.Getenv(env); v != "" {
 			b.WriteString(fmt.Sprintf("Environment=%s=%s\n", env, v))
 		}

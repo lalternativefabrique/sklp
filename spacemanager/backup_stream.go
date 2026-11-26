@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 	"io"
 	"strings"
 	"sync"
@@ -13,16 +14,7 @@ import (
 	"github.com/lalternativefabrique/sklp/restore/objstore"
 )
 
-// BackupOutcome is the result of the last scheduled backup of one service.
-type BackupOutcome struct {
-	Service string    `json:"service"`
-	At      time.Time `json:"at"`
-	OK      bool      `json:"ok"`
-	Key     string    `json:"key,omitempty"`
-	Bytes   int64     `json:"bytes,omitempty"`
-	Error   string    `json:"error,omitempty"`
-	Warning string    `json:"warning,omitempty"`
-}
+type BackupOutcome = wire.BackupOutcome
 
 type archiveStore interface {
 	List(ctx context.Context, prefix string) ([]objstore.Object, error)

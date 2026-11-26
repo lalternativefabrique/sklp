@@ -2,6 +2,7 @@ package spacemanager
 
 import (
 	"fmt"
+	"github.com/lalternativefabrique/sklp/spacemanager/wire"
 	"os"
 	"sort"
 	"strings"
@@ -186,28 +187,7 @@ func ResolveRegistryAuthsWith(metas map[string]RegistryAuthMeta, lookup func(str
 	return out
 }
 
-// ResolvedRoute is one public route after config resolution: a service name (as
-// it appears in the resolved service set, prefix already applied), the public
-// host, and an optional path prefix. The agent turns each into a gateway
-// Domain. Service is matched against the resolved service set.
-type ResolvedRoute struct {
-	Service string
-	Host    string
-	Path    string
-	Rate    float64       // per-client-IP requests/sec; 0 = unlimited
-	Burst   int           // token-bucket size; 0 = unlimited
-	Timeout time.Duration // per-request cap (dial+response+body); 0 = unbounded
-	MaxBody int64         // per-request body cap in bytes; 0 = unbounded
-
-	// The behaviours below are what a public site needs beyond routing. They are
-	// carried on the neutral model, not on one driver, so the same declaration
-	// holds whether the front door is the native mux or traefik — a route that
-	// behaved differently per driver would defeat the point of the model.
-	RedirectApex    bool // 301 www.<host> -> <host>
-	SecurityHeaders bool // HSTS, frameDeny, nosniff, referrer-policy
-	Compress        bool // gzip text responses
-	Passthrough     int  // TLS passthrough port; 0 = an HTTP route
-}
+type ResolvedRoute = wire.ResolvedRoute
 
 // Resolve turns the config into the runnable service set + metadata for one
 // space. It is a PURE function (config -> []Service + meta): no container,

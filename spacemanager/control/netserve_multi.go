@@ -1,3 +1,5 @@
+//go:build linux
+
 package control
 
 // netserve_multi.go is the multi-space network control API: ONE TCP+TLS

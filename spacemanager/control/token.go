@@ -1,3 +1,5 @@
+//go:build linux
+
 package control
 
 // token.go manages the GLOBAL Bearer token that authenticates callers on the
