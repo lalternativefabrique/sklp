@@ -195,3 +195,14 @@ func TestTagListFailureDoesNotLeakBody(t *testing.T) {
 		t.Fatalf("the response body reached the error: %v", err)
 	}
 }
+
+func TestDockerHubRepoIsListedOnItsRegistryHost(t *testing.T) {
+	for _, h := range []string{"docker.io", "index.docker.io"} {
+		if got := apiHost(h); got != "registry-1.docker.io" {
+			t.Errorf("apiHost(%q) = %q, want registry-1.docker.io", h, got)
+		}
+	}
+	if got := apiHost("rg.fr-par.scw.cloud"); got != "rg.fr-par.scw.cloud" {
+		t.Errorf("apiHost kept no other host as is: %q", got)
+	}
+}
