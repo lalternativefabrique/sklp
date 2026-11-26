@@ -50,6 +50,7 @@ func Main(args []string) int {
 	validate := fs.Bool("validate", false, "parse and validate the devstack YAML without launching anything")
 	check := fs.Bool("check", false, "with --validate: report which auto-fixes would apply, but do not write the file")
 	only := fs.String("only", "", "comma-separated subset of services to launch (plus their transitive deps)")
+	detach := fs.Bool("d", false, "run the stack in the background; stop it with `sklp dev down <stack>`")
 
 	// Parse flags then a trailing positional, interleaved: Go's flag stops at
 	// the first non-flag, so we parse, take the leading residual as <stack>,
@@ -100,6 +101,10 @@ func Main(args []string) int {
 			fmt.Fprintf(os.Stderr, "sklp dev: %v\n", err)
 		}
 		return 2
+	}
+
+	if *detach && !*validate {
+		return runDetached(repoAbs, stack, args)
 	}
 
 	var onlyNames []string

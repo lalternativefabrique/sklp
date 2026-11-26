@@ -102,6 +102,7 @@ Examples:
   sklp run -file path/to/foo.yaml
   sklp dev                       # list the dev-capable stacks
   sklp dev core                  # run .sklp/core/dev.yaml
+  sklp dev core -d               # same, in the background once ready
   sklp dev down core             # stop it from any terminal (volumes kept)
   sklp space up dev              # create + launch a space named 'dev', open a shell
   sklp space ls                  # list all spaces

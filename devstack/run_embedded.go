@@ -169,7 +169,7 @@ func embeddedRun(
 		backend.RegisterHost(scope, ns.Name, spec.ContainerPort)
 	}
 
-	printer.Banner("✓ stack ready (embedded runc) — Ctrl-C to stop")
+	printer.Banner("%s (embedded runc) — %s to stop", stackReadyBanner, stopHint(stackName))
 
 	// Steady state: surface the FIRST service crash (dev does not reconcile),
 	// or tear down on Ctrl-C.
@@ -266,4 +266,11 @@ func (s *embeddedState) watchAll(ctx context.Context) <-chan string {
 		}()
 	}
 	return out
+}
+
+func stopHint(stack string) string {
+	if runningDetached() {
+		return "`sklp dev down " + stack + "`"
+	}
+	return "Ctrl-C"
 }

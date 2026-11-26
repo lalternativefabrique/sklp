@@ -33,6 +33,7 @@ func initDevSkill(v Vars) Skill {
 	b.WriteString("# You author .sklp/stack/dev.yaml directly (see the file shape below), then:\n")
 	b.WriteString("sklp dev stack --validate  # parse-only sanity check, no launch\n")
 	b.WriteString("sklp dev stack             # boot the stack\n")
+	b.WriteString("sklp dev stack -d          # boot it in the background, returns once ready\n")
 	b.WriteString("sklp dev down stack        # stop it from another terminal (volumes kept)\n")
 	b.WriteString("```\n\n")
 	b.WriteString("If the repo has a root compose file (compose.yaml / docker-compose.yml), do not write dev.yaml from scratch: run `sklp init -from compose` first. It translates every service and writes each action it could not do as a `# TODO(import):` comment above the service — resolve all of them, keep the `# import:` lines in mind, then validate.\n\n")
