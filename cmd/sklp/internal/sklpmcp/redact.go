@@ -57,6 +57,9 @@ func (r *redactor) err(err error) error {
 	if m := authStatusRE.FindStringSubmatch(msg); m != nil {
 		return fmt.Errorf("the node refused the context's credentials (status %s)", m[1])
 	}
+	if strings.HasPrefix(msg, "unauthorized") {
+		return errors.New("the node refused the context's credentials (status 401)")
+	}
 	if strings.Contains(msg, "fingerprint mismatch") {
 		return errors.New("the node's certificate does not match the fingerprint pinned in the context")
 	}

@@ -32,7 +32,7 @@ const (
 )
 
 func (n *node) tools() []toolDef {
-	return []toolDef{
+	return append([]toolDef{
 		define(&mcp.Tool{Name: "deploy_spaces", Description: "List the spaces the node runs, with their status and container counts."}, read, n.listSpaces),
 		define(&mcp.Tool{Name: "deploy_get", Description: "Show one space as its supervisor sees it: each service and job, its image, " +
 			"instances (state, restarts, uptime), recent rollouts and job runs."}, read, n.getSpace),
@@ -51,7 +51,7 @@ func (n *node) tools() []toolDef {
 		define(&mcp.Tool{Name: "deploy_run_job", Description: "Re-run a oneshot job of a space that reached a terminal state. Fails if a run is in flight."}, destructive, n.runJob),
 		define(&mcp.Tool{Name: "deploy_delete", Description: "Stop a space and remove its manifest so it does not come back. " +
 			"With volumes=true its named volumes, and the data in them, are destroyed too, irreversibly."}, destructive, n.deleteSpace),
-	}
+	}, n.followTools()...)
 }
 
 type noInput struct{}

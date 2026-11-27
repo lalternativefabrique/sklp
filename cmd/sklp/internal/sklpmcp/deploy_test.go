@@ -131,6 +131,29 @@ func newFakeNode(t *testing.T) *fakeNode {
 		fmt.Fprintf(w, "hello\ntoken=%s\n", testToken)
 		w.Header().Set(control.HeaderExecExitCode, "3")
 	})
+	mux.HandleFunc("GET /v1/follows", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, control.FollowsResponse{Node: "demo", Follows: []control.FollowEntry{{Name: "hello", Repo: "https://github.com/moi/hello", Branch: "main"}}})
+	})
+	mux.HandleFunc("POST /v1/follows", func(w http.ResponseWriter, r *http.Request) {
+		f.record(r)
+		var req control.FollowRequest
+		_ = json.Unmarshal(f.body["/v1/follows"], &req)
+		if req.Repo == "https://github.com/moi/taken" {
+			http.Error(w, "follows: repo https://github.com/moi/taken is already followed as taken", http.StatusConflict)
+			return
+		}
+		writeJSON(w, http.StatusCreated, control.FollowEntry{Name: "app", Repo: req.Repo, Branch: "dev"})
+	})
+	mux.HandleFunc("DELETE /v1/follows/hello", func(w http.ResponseWriter, r *http.Request) {
+		f.record(r)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("DELETE /v1/follows/ghost", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "follows: no repo is followed as ghost", http.StatusNotFound)
+	})
+	mux.HandleFunc("DELETE /v1/follows/locked", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unauthorized: a valid Bearer token is required", http.StatusUnauthorized)
+	})
 	mux.HandleFunc("GET /v1/spaces/locked/state", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad token "+testToken, http.StatusUnauthorized)
 	})
@@ -426,9 +449,9 @@ func TestRestartRunAndDelete(t *testing.T) {
 	}
 }
 
-var destructiveTools = []string{"deploy_apply", "deploy_exec", "deploy_restart", "deploy_run_job", "deploy_delete", "space_exec", "space_down"}
+var destructiveTools = []string{"deploy_apply", "deploy_exec", "deploy_restart", "deploy_run_job", "deploy_delete", "deploy_unfollow", "space_exec", "space_down"}
 
-var writeTools = []string{"dev_up", "dev_down", "space_stop", "run_pipeline", "job_cancel"}
+var writeTools = []string{"deploy_follow", "dev_up", "dev_down", "space_stop", "run_pipeline", "job_cancel"}
 
 func TestProtocolEndToEnd(t *testing.T) {
 	h := newHarness(t, false)
@@ -447,7 +470,7 @@ func TestProtocolEndToEnd(t *testing.T) {
 			t.Fatalf("%s has no description or schema", tl.Name)
 		}
 	}
-	if len(byName) != 25 {
+	if len(byName) != 28 {
 		t.Fatalf("%d tools listed", len(byName))
 	}
 	for _, name := range writeTools {
@@ -481,7 +504,7 @@ func TestReadOnlyHidesAndRefusesDestructiveTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 13 {
+	if len(tools.Tools) != 14 {
 		t.Fatalf("%d tools in read-only mode", len(tools.Tools))
 	}
 	for _, tl := range tools.Tools {
@@ -490,12 +513,48 @@ func TestReadOnlyHidesAndRefusesDestructiveTools(t *testing.T) {
 		}
 	}
 	for _, name := range append(destructiveTools, writeTools...) {
-		res, err := h.cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: map[string]any{"space": "rolling-demo", "service": "web", "job": "migrate"}})
+		res, err := h.cs.CallTool(context.Background(), &mcp.CallToolParams{Name: name, Arguments: map[string]any{"space": "rolling-demo", "service": "web", "job": "migrate", "repo": "https://github.com/moi/app", "name": "hello"}})
 		if err == nil && !res.IsError {
 			t.Fatalf("%s ran in read-only mode", name)
 		}
 	}
-	if h.node.hit("POST /v1/spaces/rolling-demo/restart/web") || h.node.hit("POST /v1/spaces/rolling-demo/down") {
+	if h.node.hit("POST /v1/spaces/rolling-demo/restart/web") || h.node.hit("POST /v1/spaces/rolling-demo/down") || h.node.hit("POST /v1/follows") || h.node.hit("DELETE /v1/follows/hello") {
 		t.Fatal("a destructive call reached the node in read-only mode")
+	}
+}
+
+func TestFollowFollowsAndUnfollow(t *testing.T) {
+	h := newHarness(t, false)
+	var list followsOut
+	h.ok("deploy_follows", nil, &list)
+	if list.Node != "demo" || len(list.Follows) != 1 || list.Follows[0].Name != "hello" {
+		t.Fatalf("follows = %+v", list)
+	}
+	var f followOut
+	h.ok("deploy_follow", map[string]any{"repo": "https://github.com/moi/app", "branch": "dev", "name": "app"}, &f)
+	if f.Name != "app" || f.Branch != "dev" {
+		t.Fatalf("follow = %+v", f)
+	}
+	var req control.FollowRequest
+	_ = json.Unmarshal(h.node.body["/v1/follows"], &req)
+	if req != (control.FollowRequest{Repo: "https://github.com/moi/app", Branch: "dev", Name: "app"}) {
+		t.Fatalf("node got %+v", req)
+	}
+	if res, text := h.call("deploy_follow", map[string]any{"repo": "https://github.com/moi/taken"}); !res.IsError || !strings.Contains(text, "already followed") {
+		t.Fatalf("taken: %v %q", res.IsError, text)
+	}
+	if res, text := h.call("deploy_follow", map[string]any{"repo": "https://x:" + testToken + "@github.com/moi/app"}); !res.IsError || strings.Contains(text, testToken) || !strings.Contains(text, "credentials") {
+		t.Fatalf("credential URL: %v %q", res.IsError, text)
+	}
+	var un unfollowOut
+	h.ok("deploy_unfollow", map[string]any{"name": "hello"}, &un)
+	if !h.node.hit("DELETE /v1/follows/hello") {
+		t.Fatal("node never saw the unfollow")
+	}
+	if res, text := h.call("deploy_unfollow", map[string]any{"name": "ghost"}); !res.IsError || !strings.Contains(text, "no repo is followed as ghost") {
+		t.Fatalf("ghost: %v %q", res.IsError, text)
+	}
+	if res, text := h.call("deploy_unfollow", map[string]any{"name": "locked"}); !res.IsError || text != "the node refused the context's credentials (status 401)" {
+		t.Fatalf("locked: %v %q", res.IsError, text)
 	}
 }
