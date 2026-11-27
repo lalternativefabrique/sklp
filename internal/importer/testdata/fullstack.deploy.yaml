@@ -1,0 +1,108 @@
+# Imported for production from docker-compose.yml by `sklp init -from compose -to deploy`.
+# 9 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: files: docker-compose.override.yml is not imported: the default override holds local development tweaks; put production-only settings in compose.prod.yaml and import again
+# import: profiles: services behind a compose profile are left out of production: mailpit — add them by hand if they belong there
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space fullstack-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: API_KEY, API_TOKEN (read from .env.api), BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, POSTGRES_PASSWORD (compose defaulted it; never reuse that default in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, BACKUP_S3_REGION, BACKUP_S3_URL
+version: 1
+kind: deploy
+name: prod
+
+env_files:
+  - .env.api
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # import: ports: host port 5433 is not published: the other services reach it at postgres:5432 inside the space, and a datastore stays off the public interface
+  # TODO(import): volumes: ./db/init.sql:/docker-entrypoint-initdb.d/init.sql is a host bind mount, and sklp only mounts named volumes. For init scripts: bake them into an image (`FROM postgres:16-alpine` + `COPY db/init.sql /docker-entrypoint-initdb.d/init.sql`), or run them from a oneshot run: service that depends on this one (e.g. `psql "$DATABASE_URL" -f db/init.sql`)
+  # import: healthcheck: `pg_isready -U app` replaced by the log line "database system is ready to accept connections": the node cannot exec a probe
+  # import: restart: dropped: the node restarts a service that exits, with backoff; a run-to-completion task belongs under jobs:
+  # import: backup: a nightly pg_dump is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); compose had no backup
+  postgres:
+    image: postgres:16-alpine
+    port: 5432
+    env:
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: app
+      SKLP_BACKUP_TO: ${BACKUP_S3_URL}
+      TZ: Europe/Paris
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ready:
+      log: database system is ready to accept connections
+      timeout: 120s
+    backup:
+      schedule: 0 3 * * *
+      command: [sh, -c, exec pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"]
+
+  redis:
+    image: redis:7
+    command: [redis-server, --appendonly, "yes"]
+    port: 6379
+    ready:
+      log: Ready to accept connections
+      timeout: 120s
+
+  # import: build: build args GO_VERSION are a publish concern now: pass them as build_args in the publish pipeline
+  # TODO(import): image: compose builds acme/api:dev from ./api: publish it to your registry with an immutable tag (a `kind: publish` pipeline under .sklp/pipelines/) and set image: to that tag
+  # TODO(import): command: `go run ./cmd/api` starts a development server: production runs the built image's own start command — drop command: or set the production one
+  # import: working_dir: /app dropped: the published image's WORKDIR applies
+  # import: environment: environment LOG_LEVEL: LOG_LEVEL inlined from .env.example
+  # import: env_file: .env.api: each of its keys is passed as `KEY: ${KEY}`, and the file is listed under env_files: so sklp deploy reads the values from it on the machine that runs it
+  # TODO(import): routes: published HTTP port 8080 becomes a gateway route on api.example.com: set the public hostname under spaces: (or add a traefik/caddy Host label and import again)
+  # import: volumes: ./api:/app dropped: in production the code and its dependencies come from the published image
+  # import: volumes: /app/tmp dropped: in production the code and its dependencies come from the published image
+  # import: healthcheck: `wget -qO- http://localhost:8080/healthz` imported as an HTTP probe (2xx expected); rollouts wait for it before switching traffic
+  api:
+    image: acme/api:dev
+    command: [go, run, ./cmd/api]
+    port: 8080
+    env:
+      API_KEY: ${API_KEY}
+      API_TOKEN: ${API_TOKEN}
+      DATABASE_URL: postgres://app:${POSTGRES_PASSWORD}@postgres:5432/app
+      LOG_LEVEL: debug
+      REDIS_URL: redis://redis:6379
+    depends_on: [migrate, redis]
+    ready:
+      http: http://localhost:8080/healthz
+      timeout: 90s
+
+  # TODO(import): image: compose builds this service from ./web: publish the image to your registry with an immutable tag (a `kind: publish` pipeline under .sklp/pipelines/), declare the registry under registries:, and set image: to it
+  # import: working_dir: /usr/src/app dropped: the published image's WORKDIR applies
+  # TODO(import): port: 5173 is a development server port: the production image serves on its own port — set port: to it
+  # TODO(import): routes: published HTTP port 5173 becomes a gateway route on web.example.com: set the public hostname under spaces: (or add a traefik/caddy Host label and import again)
+  # import: volumes: ./web:/usr/src/app dropped: in production the code and its dependencies come from the published image
+  # import: volumes: /usr/src/app/node_modules dropped: in production the code and its dependencies come from the published image
+  # import: ready: no healthcheck: a TCP probe on port 5173 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  web:
+    image: registry.example.com/fullstack/web:unpublished
+    port: 5173
+    depends_on: [api]
+    ready:
+      tcp: localhost:5173
+      timeout: 60s
+
+jobs:
+  # TODO(import): volumes: ./db/migrations:/migrations is a host bind mount, and sklp only mounts named volumes. Bake the file into an image (`FROM migrate/migrate:v4.17.0` + `COPY db/migrations /migrations`) and use that image, or pass the setting through env
+  # import: jobs: moved under jobs: api waits for it to exit 0 (condition service_completed_successfully)
+  migrate:
+    image: migrate/migrate:v4.17.0
+    command: [-path, /migrations, -database, 'postgres://app:${POSTGRES_PASSWORD}@postgres:5432/app?sslmode=disable', up]
+    depends_on: [postgres]
+
+spaces:
+  fullstack-production:
+    gateway:
+      routes:
+        - service: api
+          host: api.example.com
+        - service: web
+          host: web.example.com
