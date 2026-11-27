@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lalternativefabrique/sklp/spacemanager/grants"
 	"io/fs"
 	"net"
 	"os"
@@ -68,6 +69,12 @@ type DeployService struct {
 	// a deployed space never bind-mounts the host. When nil the launched
 	// spec is byte-identical to the deploy spec. See runtime.DevMount.
 	DevMounts []DevMount
+
+	// ControlSocketDir is the host directory holding this service's control
+	// grant socket, mounted read-only at grants.MountPoint. Set only when the
+	// node operator granted the service (`sklet console allow`); a manifest
+	// cannot ask for it.
+	ControlSocketDir string
 
 	// Volumes are the declared `volumes:` entries (docker -v form: a named
 	// "name:/ctr" or a host bind "/host:/ctr"). The space resolves each to
@@ -472,6 +479,9 @@ func (s *Space) Start(ctx context.Context, svc DeployService) (int, error) {
 		return 0, fmt.Errorf("deploy space: service %q volumes: %w", svc.Name, verr)
 	} else {
 		mounts = append(mounts, vols...)
+	}
+	if svc.ControlSocketDir != "" {
+		mounts = append(mounts, DevMount{Source: svc.ControlSocketDir, Destination: grants.MountPoint, ReadOnly: true})
 	}
 
 	// Image VOLUME directives (e.g. postgres' /var/lib/postgresql/data) need a

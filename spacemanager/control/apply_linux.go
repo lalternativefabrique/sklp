@@ -129,6 +129,9 @@ func keepRolledImages(sup Supervisor, services []spacemanager.Service) {
 // caller must not trigger). ok is false when no manifest exists, it cannot be
 // read/decoded, or it predates the Stack field (empty) — every such case is
 // "unknown owner", matching the local guard's same fail-open behaviour.
+// SpaceOwner is the stack recorded as the owner of a deployed space.
+func SpaceOwner(space string) (string, bool) { return liveSpaceOwner(space) }
+
 func liveSpaceOwner(space string) (stack string, ok bool) {
 	data, err := os.ReadFile(ManifestPath(space))
 	if err != nil {
