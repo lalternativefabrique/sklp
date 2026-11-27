@@ -50,6 +50,41 @@ type RunnableFacts struct {
 	// The dev.yaml generator can fan out one service per binary in
 	// future versions; v0 only emits the root binary when present.
 	Binaries []string
+
+	// DevServer is the JS framework a node app's dev server runs on, found in
+	// its package.json dependencies; nil when none is recognised.
+	DevServer *DevServer
+}
+
+// DevServer is how a framework's dev server binds an address and a port.
+type DevServer struct {
+	Framework string
+	Port      int
+	// BindFlags make the server listen on 0.0.0.0: each space reaches it
+	// through its own netns, so a loopback-only server is unreachable.
+	BindFlags string
+}
+
+// devServers is checked in order: a Nuxt or SvelteKit app also depends on vite.
+var devServers = []struct {
+	dep string
+	DevServer
+}{
+	{"next", DevServer{"next", 3000, "-H 0.0.0.0 -p 3000"}},
+	{"nuxt", DevServer{"nuxt", 3000, "--host 0.0.0.0 --port 3000"}},
+	{"astro", DevServer{"astro", 4321, "--host 0.0.0.0 --port 4321"}},
+	{"@sveltejs/kit", DevServer{"sveltekit", 5173, "--host 0.0.0.0 --port 5173"}},
+	{"vite", DevServer{"vite", 5173, "--host 0.0.0.0 --port 5173"}},
+}
+
+func detectDevServer(deps map[string]bool) *DevServer {
+	for _, d := range devServers {
+		if deps[d.dep] {
+			ds := d.DevServer
+			return &ds
+		}
+	}
+	return nil
 }
 
 // ScanRunnable runs Scan() then enriches each module by opening its
@@ -126,7 +161,7 @@ func analyzeRunnable(repo string, lang LanguageFacts, mod ModuleFacts) RunnableF
 			rf.Reason = "non-package.json manifest"
 			return rf
 		}
-		hasDev, hasStart, isWorkspaceRoot, looksLikeLibrary, err := readNodePackageJSON(filepath.Join(modPath, "package.json"))
+		hasDev, hasStart, isWorkspaceRoot, looksLikeLibrary, deps, err := readNodePackageJSON(filepath.Join(modPath, "package.json"))
 		switch {
 		case err != nil:
 			rf.IsApp = false
@@ -145,6 +180,7 @@ func analyzeRunnable(repo string, lang LanguageFacts, mod ModuleFacts) RunnableF
 			rf.IsApp = true
 			rf.Reason = "package.json scripts.dev present"
 			rf.Entrypoint = nodeRunCommand(lang.PackageManager, mod.Name)
+			rf.DevServer = detectDevServer(deps)
 		case hasStart:
 			rf.IsApp = true
 			rf.Reason = "package.json scripts.start present (no dev script)"
@@ -267,10 +303,10 @@ var mainPkgRE = regexp.MustCompile(`(?m)^package\s+main\b`)
 // Returns isApp = (hasDev || hasStart) && !isWorkspaceRoot &&
 // !looksLikeLibrary so the caller has one boolean to act on while
 // still seeing the underlying inputs through the dedicated returns.
-func readNodePackageJSON(path string) (hasDev, hasStart, isWorkspaceRoot, looksLikeLibrary bool, err error) {
+func readNodePackageJSON(path string) (hasDev, hasStart, isWorkspaceRoot, looksLikeLibrary bool, deps map[string]bool, err error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return false, false, false, false, err
+		return false, false, false, false, nil, err
 	}
 	var doc struct {
 		Scripts    map[string]string `json:"scripts"`
@@ -281,9 +317,18 @@ func readNodePackageJSON(path string) (hasDev, hasStart, isWorkspaceRoot, looksL
 		Types      string            `json:"types"`
 		Exports    any               `json:"exports"`
 		Files      []string          `json:"files"`
+		Deps       map[string]any    `json:"dependencies"`
+		DevDeps    map[string]any    `json:"devDependencies"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return false, false, false, false, err
+		return false, false, false, false, nil, err
+	}
+	deps = map[string]bool{}
+	for name := range doc.Deps {
+		deps[name] = true
+	}
+	for name := range doc.DevDeps {
+		deps[name] = true
 	}
 	_, hasDev = doc.Scripts["dev"]
 	_, hasStart = doc.Scripts["start"]
@@ -298,7 +343,7 @@ func readNodePackageJSON(path string) (hasDev, hasStart, isWorkspaceRoot, looksL
 		pointsToBuildOutput(doc.Types) ||
 		doc.Exports != nil ||
 		filesListsBuildOutput(doc.Files)
-	return hasDev, hasStart, isWorkspaceRoot, looksLikeLibrary, nil
+	return hasDev, hasStart, isWorkspaceRoot, looksLikeLibrary, deps, nil
 }
 
 // pointsToBuildOutput reports whether a package.json `main`/`module`/

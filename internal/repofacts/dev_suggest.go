@@ -1,6 +1,7 @@
 package repofacts
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ type SuggestedService struct {
 	Name      string          `yaml:"-"`
 	Run       string          `yaml:"run"`
 	Workdir   string          `yaml:"workdir,omitempty"`
+	Ports     []string        `yaml:"ports,omitempty"`
 	DependsOn []string        `yaml:"depends_on,omitempty"`
 	Optional  bool            `yaml:"optional,omitempty"`
 	Ready     *SuggestedReady `yaml:"ready,omitempty"`
@@ -181,19 +183,38 @@ func suggestForRunnable(r RunnableFacts) (SuggestedService, bool) {
 		Workdir: r.Module.Path,
 		Run:     r.Entrypoint,
 	}
-	// Backends get a guessed ready probe; frontends don't (Vite/Next
-	// expose a port but no /health route by default).
-	if r.Lang == "go" || r.Lang == "python" {
-		svc.Ready = &SuggestedReady{
-			HTTP:    "http://localhost:8080/health",
-			Timeout: "60s",
-		}
-		svc.Notes = []string{"port + ready endpoint guessed — verify against your code"}
+	switch {
+	case r.Lang == "node" && r.DevServer != nil:
+		ds := r.DevServer
+		svc.Run = withArgs(r.PackageManager, r.Entrypoint, ds.BindFlags)
+		svc.Ports = []string{fmt.Sprintf("%d:%d", ds.Port, ds.Port)}
+		svc.Ready = &SuggestedReady{TCP: fmt.Sprintf("localhost:%d", ds.Port), Timeout: "120s"}
+		svc.Notes = []string{ds.Framework + " dev server bound to 0.0.0.0 and published on its default port"}
+	case r.Lang == "node":
+		svc.Notes = []string{"dev server not recognised: make it listen on 0.0.0.0 and add ports: [\"<port>:<port>\"], or the host never reaches it"}
+	case r.Lang == "python":
+		svc.Run += " --host 0.0.0.0 --port 8000"
+		svc.Ports = []string{"8000:8000"}
+		svc.Ready = &SuggestedReady{HTTP: "http://localhost:8000/health", Timeout: "60s"}
+		svc.Notes = []string{"ready endpoint guessed — verify against your code"}
+	case r.Lang == "go":
+		svc.Ports = []string{"8080:8080"}
+		svc.Ready = &SuggestedReady{HTTP: "http://localhost:8080/health", Timeout: "60s"}
+		svc.Notes = []string{"port + ready endpoint guessed: the server must listen on 0.0.0.0:8080 — verify against your code"}
 	}
 	if r.Reason != "" {
 		svc.Notes = append(svc.Notes, "detected: "+r.Reason)
 	}
 	return svc, true
+}
+
+// withArgs appends args to a package-manager script run; npm alone needs the
+// -- separator to forward them to the script.
+func withArgs(pm, run, args string) string {
+	if pm == "" || pm == "npm" {
+		return run + " -- " + args
+	}
+	return run + " " + args
 }
 
 // svcNameFromPath turns a module path into a service name. The

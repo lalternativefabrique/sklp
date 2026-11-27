@@ -70,7 +70,9 @@ func newServer(opts Options) (*mcp.Server, *local, error) {
 	}
 
 	instructions := "sklp: local dev stacks (dev_*), closed environments (space_*), pipelines such as ci (run_pipeline, job_*), " +
-		"discovered with stacks. Long runs return a job id: poll job_status."
+		"discovered with stacks. Long runs return a job id: poll job_status. " +
+		"Before writing or editing any file under .sklp/, never from memory: sklp_guide for that contract, sklp_draft for a starting point, " +
+		"sklp_schema for the exact fields, then validate what you wrote (dev_validate, pipeline_validate) and fix it until it passes."
 	if n != nil {
 		instructions += fmt.Sprintf(" deploy_* tools pilot the node of deploy context %q (%s): "+
 			"a node runs spaces, each the services and jobs of one deploy.yaml stack.", n.context, n.server)
