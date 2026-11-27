@@ -152,11 +152,11 @@ func TestSpaceLsGetAndExec(t *testing.T) {
 	}
 }
 
-func TestDevValidateReportsTheFailure(t *testing.T) {
+func TestValidateDevReportsTheLoaderFailure(t *testing.T) {
 	h := newLocalHarness(t, false)
-	var out outputOut
-	h.ok("dev_validate", map[string]any{"repo": h.repo, "stack": "web"}, &out)
-	if out.OK || out.ExitCode != 1 || !strings.Contains(out.Output[0], "unknown probe") {
+	var out validateOut
+	h.ok("contract_validate", map[string]any{"repo": h.repo, "contract": "dev", "stack": "web"}, &out)
+	if out.Valid || len(out.Errors) == 0 || !strings.Contains(out.Errors[0], "unknown probe") {
 		t.Fatalf("got %+v", out)
 	}
 }
@@ -242,7 +242,7 @@ func TestReadOnlyServesOnlyLocalReads(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names = append(names, tl.Name)
 	}
-	want := "deploy_contexts,dev_logs,dev_ls,dev_validate,job_status,pipeline_validate,sklp_draft,sklp_guide,sklp_schema,space_get,space_ls,stacks"
+	want := "contract_validate,deploy_contexts,dev_logs,dev_ls,job_status,sklp_draft,sklp_guide,sklp_schema,space_get,space_ls,stacks"
 	if got := strings.Join(slices.Sorted(slices.Values(names)), ","); got != want {
 		t.Fatalf("read-only tools = %s, want %s", got, want)
 	}
@@ -262,7 +262,7 @@ func TestGuideIsTheRepoTailoredSkill(t *testing.T) {
 	if out.Guide != "# guide init-config for "+h.repo+"\n" {
 		t.Fatalf("guide = %q", out.Guide)
 	}
-	if res, text := h.call("sklp_guide", map[string]any{"repo": h.repo, "contract": "deploy"}); !res.IsError || !strings.Contains(text, "ci, dev, operator, publish, space") {
+	if res, text := h.call("sklp_guide", map[string]any{"repo": h.repo, "contract": "nope"}); !res.IsError || !strings.Contains(text, "ci, deploy, dev, operator, publish, space, watches") {
 		t.Fatalf("unknown contract: %v %q", res.IsError, text)
 	}
 }
@@ -288,32 +288,109 @@ func TestDraftScansTheRepoAndWritesNothing(t *testing.T) {
 	}
 }
 
-func TestSchemaIsThePublishedPipelineSchema(t *testing.T) {
+func TestSchemaServesEachContract(t *testing.T) {
 	h := newLocalHarness(t, false)
-	var out struct {
-		Schema struct {
-			ID string `json:"$id"`
-		} `json:"schema"`
-	}
-	h.ok("sklp_schema", nil, &out)
-	if !strings.HasSuffix(out.Schema.ID, "/pipeline/pipeline.schema.json") {
-		t.Fatalf("schema id = %q", out.Schema.ID)
+	for contract, suffix := range map[string]string{
+		"pipeline":      "/pipeline/pipeline.schema.json",
+		"deploy":        "/schema/deploy.schema.json",
+		"deploy-root":   "/schema/deploy-root.schema.json",
+		"image-watches": "/schema/image-watches.schema.json",
+	} {
+		var out struct {
+			Schema struct {
+				ID string `json:"$id"`
+			} `json:"schema"`
+		}
+		h.ok("sklp_schema", map[string]any{"contract": contract}, &out)
+		if !strings.HasSuffix(out.Schema.ID, suffix) {
+			t.Fatalf("%s schema id = %q", contract, out.Schema.ID)
+		}
 	}
 }
 
-func TestPipelineValidate(t *testing.T) {
+func TestValidatePipeline(t *testing.T) {
 	h := newLocalHarness(t, false)
 	dir := filepath.Join(h.repo, ".sklp", "pipelines")
 	_ = os.WriteFile(filepath.Join(dir, "ci.yaml"), []byte("version: 1\nkind: pipeline\nname: ci\nsteps:\n  - name: vet\n    run: go vet ./...\n"), 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("version: 1\nkind: pipeline\nname: bad\nsteps:\n  - name: t\n    services: [ghost]\n    run: echo\n"), 0o644)
 	var ok validateOut
-	h.ok("pipeline_validate", map[string]any{"repo": h.repo, "pipeline": "ci"}, &ok)
+	h.ok("contract_validate", map[string]any{"repo": h.repo, "contract": "pipeline", "pipeline": "ci"}, &ok)
 	if !ok.Valid || strings.Join(ok.Steps, ",") != "vet" {
 		t.Fatalf("ci = %+v", ok)
 	}
 	var bad validateOut
-	h.ok("pipeline_validate", map[string]any{"repo": h.repo, "pipeline": "bad"}, &bad)
-	if bad.Valid || bad.Error == "" {
+	h.ok("contract_validate", map[string]any{"repo": h.repo, "contract": "pipeline", "pipeline": "bad"}, &bad)
+	if bad.Valid || len(bad.Errors) == 0 {
 		t.Fatalf("bad = %+v", bad)
+	}
+}
+
+func TestValidateDeploySeparatesErrorsFromIgnoredKeys(t *testing.T) {
+	h := newLocalHarness(t, false)
+	var ok validateOut
+	h.ok("contract_validate", map[string]any{"repo": h.repo, "contract": "deploy", "stack": "web"}, &ok)
+	if !ok.Valid || len(ok.Warnings) != 0 {
+		t.Fatalf("fixture = %+v", ok)
+	}
+	bad := "version: 1\nkind: deploy\nservices:\n  web:\n    image: x\n    port: ${PORT}\n    limits: {memory: 1G}\n    depends_on: [db]\n  api:\n    port: eighty\n"
+	_ = os.WriteFile(filepath.Join(h.repo, ".sklp", "web", "deploy.yaml"), []byte(bad), 0o644)
+	var out validateOut
+	h.ok("contract_validate", map[string]any{"repo": h.repo, "contract": "deploy", "stack": "web"}, &out)
+	all := strings.Join(out.Errors, "\n")
+	if out.Valid || !strings.Contains(all, `depends_on "db"`) || !strings.Contains(all, "services.api: image is required") || !strings.Contains(all, "/services/api/port") {
+		t.Fatalf("errors = %q", out.Errors)
+	}
+	if strings.Contains(all, "/services/web/port") {
+		t.Fatalf("a ${VAR} value was flagged: %q", out.Errors)
+	}
+	if len(out.Warnings) != 1 || !strings.Contains(out.Warnings[0], `"limits"`) {
+		t.Fatalf("warnings = %q", out.Warnings)
+	}
+}
+
+func TestValidateDeployRootAndWatchesAcrossFiles(t *testing.T) {
+	h := newLocalHarness(t, false)
+	sk := filepath.Join(h.repo, ".sklp")
+	_ = os.WriteFile(filepath.Join(sk, "deploy-root.yaml"), []byte("kind: deploy-root\nnode: demo\ndeployments:\n  - space: prod\n    path: .sklp/web/deploy.yaml\n  - space: gone\n    path: .sklp/nope/deploy.yaml\n"), 0o644)
+	var root validateOut
+	h.ok("contract_validate", map[string]any{"repo": h.repo, "contract": "deploy-root"}, &root)
+	if root.Valid || len(root.Errors) != 1 || !strings.Contains(root.Errors[0], ".sklp/nope/deploy.yaml does not exist") {
+		t.Fatalf("root = %+v", root)
+	}
+	watches := "watches:\n  - name: web\n    service: web\n    image_repo: rg.example/ns/web\n    node: demo\n    space: prod\n" +
+		"  - name: api\n    service: api\n    image_repo: rg.example/ns/api:v1\n    node: demo\n    space: prod\n    tag_patern: x\n"
+	_ = os.WriteFile(filepath.Join(sk, "image-watches.yaml"), []byte(watches), 0o644)
+	var w validateOut
+	h.ok("contract_validate", map[string]any{"repo": h.repo, "contract": "image-watches"}, &w)
+	all := strings.Join(w.Errors, "\n")
+	if w.Valid || !strings.Contains(all, "must not carry a tag") || !strings.Contains(all, `service "api" is not in .sklp/web/deploy.yaml`) || strings.Contains(all, "watches[0]") {
+		t.Fatalf("watches errors = %q", w.Errors)
+	}
+	if len(w.Warnings) != 1 || !strings.Contains(w.Warnings[0], "tag_patern") {
+		t.Fatalf("watches warnings = %q", w.Warnings)
+	}
+}
+
+func TestGuidesAreAlsoPrompts(t *testing.T) {
+	h := newLocalHarness(t, true)
+	ctx := context.Background()
+	list, err := h.cs.ListPrompts(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, p := range list.Prompts {
+		names = append(names, p.Name)
+	}
+	if got := strings.Join(slices.Sorted(slices.Values(names)), ","); got != "init-ci,init-config,init-deploy,init-dev,init-publish,init-watches,sklp-operator" {
+		t.Fatalf("prompts = %s", got)
+	}
+	res, err := h.cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "init-deploy", Arguments: map[string]string{"repo": h.repo}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := res.Messages[0].Content.(*mcp.TextContent).Text
+	if !strings.Contains(text, "# guide init-deploy for "+h.repo) || !strings.Contains(text, "contract_validate") {
+		t.Fatalf("prompt = %q", text)
 	}
 }

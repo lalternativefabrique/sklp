@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "RootDeployment": {
+      "additionalProperties": false,
+      "description": "RootDeployment is one space this repo deploys, and the manifest that describes it.",
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "node_id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "space": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/lalternativefabrique/sklp/main/schema/deploy-root.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Schema for .sklp/deploy-root.yaml: the spaces a push to the default branch reconciles, generated from domain.Root.",
+  "properties": {
+    "deployments": {
+      "items": {
+        "$ref": "#/$defs/RootDeployment"
+      },
+      "type": "array"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "node": {
+      "description": "Node is the default target for every deployment listed, named the way\nthe operator named it when registering the host — the same name the VM\ncarries. A name survives the address changing, which an IP written into\nevery repo would not, and it stays readable in a diff. An entry may\noverride it.",
+      "type": "string"
+    },
+    "node_id": {
+      "description": "NodeID is the superseded way to name that same node: an opaque id only\nthe Skalpai database could resolve, which forced every reconcile to\nconsult the node registry before it could reach anything. Still read so\nthe roots already deployed keep reconciling; Server wins when both are\ngiven.",
+      "type": "string"
+    }
+  },
+  "title": "sklp deploy-root",
+  "type": "object"
+}

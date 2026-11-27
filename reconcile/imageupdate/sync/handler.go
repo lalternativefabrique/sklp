@@ -74,24 +74,6 @@ func New(repo domain.Repository, fetcher FileFetcher, nodes NodeDirectory, decry
 	return &Handler{repo: repo, fetcher: fetcher, nodes: nodes, decrypt: decrypt}
 }
 
-type watchFile struct {
-	Watches []watchEntry `yaml:"watches"`
-}
-
-type watchEntry struct {
-	Name       string `yaml:"name"`
-	Service    string `yaml:"service"`
-	ImageRepo  string `yaml:"image_repo"`
-	TagPattern string `yaml:"tag_pattern"`
-	// Node names the registered host, the same form deploy-root.yaml uses.
-	// NodeID is the superseded way to name it, still read for the files
-	// already committed.
-	Node         string `yaml:"node"`
-	NodeID       string `yaml:"node_id"`
-	Space        string `yaml:"space"`
-	RegistryUser string `yaml:"registry_user"`
-}
-
 // Handle reads image-watches.yaml at cmd.Ref and makes the stack's watches in
 // Postgres match it exactly: entries missing in Postgres are created, entries
 // whose fields changed are updated, and rows no longer named in the file are
@@ -109,7 +91,7 @@ func (h *Handler) Handle(ctx context.Context, cmd Command) error {
 		return fmt.Errorf("fetch %s: %w", ConfigFilePath, err)
 	}
 
-	var file watchFile
+	var file domain.WatchFile
 	if err := yaml.Unmarshal([]byte(raw), &file); err != nil {
 		slog.Warn("imageupdate: image-watches.yaml is not valid YAML, skipping reconciliation",
 			"stack_id", cmd.StackID, "error", err)
@@ -207,7 +189,7 @@ func (h *Handler) Handle(ctx context.Context, cmd Command) error {
 	return nil
 }
 
-func (h *Handler) resolve(ctx context.Context, stackID string, entry watchEntry) (*domain.Watch, error) {
+func (h *Handler) resolve(ctx context.Context, stackID string, entry domain.WatchFileEntry) (*domain.Watch, error) {
 	if entry.Node == "" && entry.NodeID == "" {
 		return nil, fmt.Errorf("node is required")
 	}
@@ -216,7 +198,7 @@ func (h *Handler) resolve(ctx context.Context, stackID string, entry watchEntry)
 	}
 	node, err := h.credentialFor(ctx, stackID, entry.Node, entry.NodeID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve node %q: %w", entry.target(), err)
+		return nil, fmt.Errorf("resolve node %q: %w", entry.Target(), err)
 	}
 	token, err := h.decrypt.Decrypt(node.SealedToken)
 	if err != nil {
@@ -233,14 +215,6 @@ func (h *Handler) resolve(ctx context.Context, stackID string, entry watchEntry)
 	}
 	watch.RegistryUser = entry.RegistryUser
 	return watch, nil
-}
-
-// target names whichever identity the entry declared, for messages.
-func (e watchEntry) target() string {
-	if e.Node != "" {
-		return e.Node
-	}
-	return e.NodeID
 }
 
 // credentialFor hands back the credential for the node an entry names,

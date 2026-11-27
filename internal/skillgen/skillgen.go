@@ -126,6 +126,12 @@ type Vars struct {
 	HasPublishTask bool
 	HasDevConfig   bool
 
+	// HasDeployConfig / HasDeployRoot / HasImageWatches report the deploy
+	// contracts the same way; the caller sets them after BuildVars.
+	HasDeployConfig bool
+	HasDeployRoot   bool
+	HasImageWatches bool
+
 	// registryInferred records whether Registry came from the scan
 	// (true) or is a placeholder (false), so templates can emit a
 	// review NOTE only when it's a guess.
@@ -221,6 +227,8 @@ func Generate(v Vars) []Skill {
 		initCISkill(v),
 		initConfigSkill(v),
 		initPublishSkill(v),
+		initDeploySkill(v),
+		initWatchesSkill(v),
 		operatorSkill(v),
 	}
 	sort.Slice(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })

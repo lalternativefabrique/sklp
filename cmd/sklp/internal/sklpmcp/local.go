@@ -107,7 +107,6 @@ func (l *local) tools() []toolDef {
 		define(&mcp.Tool{Name: "stacks", Description: "List what a repository declares under .sklp/: each stack with its contracts " +
 			"(dev, deploy, ...) and the pipelines (ci, publish, ...). Start here."}, read, l.stacks),
 
-		define(&mcp.Tool{Name: "dev_validate", Description: "Parse and validate a stack's dev.yaml without launching it (sklp dev <stack> -validate -check)."}, read, l.devValidate),
 		define(&mcp.Tool{Name: "dev_up", Description: "Start a stack's local dev environment in the background (sklp dev <stack> -d). " +
 			"Returns a job id: the job ends once the stack is ready or failed to start; poll job_status. Only one dev stack may run on the machine."}, write, l.devUp),
 		define(&mcp.Tool{Name: "dev_ls", Description: "List the dev stacks recorded on this machine, running or not, with their repo and run-log."}, read, l.devLs),
@@ -189,21 +188,6 @@ type outputOut struct {
 	ExitCode  int      `json:"exit_code"`
 	Output    []string `json:"output"`
 	Truncated bool     `json:"truncated,omitempty"`
-}
-
-func (l *local) devValidate(ctx context.Context, in stackInput, _ *redactor) (outputOut, error) {
-	repo, err := repoDir(in.Repo)
-	if err != nil {
-		return outputOut{}, err
-	}
-	if in.Stack == "" {
-		return outputOut{}, errors.New("stack is required (see stacks)")
-	}
-	res, err := l.run(ctx, repo, quickTimeout, "dev", in.Stack, "-validate", "-check", "-no-color", "-repo", repo)
-	if err != nil {
-		return outputOut{}, err
-	}
-	return outputOut{OK: res.exitCode == 0, ExitCode: res.exitCode, Output: res.output, Truncated: res.dropped}, nil
 }
 
 type devUpInput struct {

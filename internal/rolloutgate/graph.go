@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	watchdomain "github.com/lalternativefabrique/sklp/reconcile/imageupdate/domain"
 )
 
 type target struct {
@@ -46,12 +48,6 @@ type manifest struct {
 	Jobs     map[string]manifestEntry `yaml:"jobs"`
 }
 
-type imageWatches struct {
-	Watches []struct {
-		ImageRepo string `yaml:"image_repo"`
-	} `yaml:"watches"`
-}
-
 // Load reads the repo's deployments. A repo without .sklp/deploy-root.yaml has
 // no graph: it returns nil, and publish keeps its declared order.
 func Load(repo string) (*Graph, error) {
@@ -71,7 +67,7 @@ func Load(repo string) (*Graph, error) {
 		g.add(d.Space, m.Services, false)
 		g.add(d.Space, m.Jobs, true)
 	}
-	var w imageWatches
+	var w watchdomain.WatchFile
 	if err := readYAML(filepath.Join(repo, ".sklp", "image-watches.yaml"), &w); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}

@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "WatchFileEntry": {
+      "additionalProperties": false,
+      "description": "WatchFileEntry is one watch: when the registry gains a tag of ImageRepo matching TagPattern, Service in Space on Node rolls to it.",
+      "properties": {
+        "image_repo": {
+          "description": "ImageRepo is the image repository without a tag, e.g. rg.fr-par.scw.cloud/ns/app.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Name identifies the watch within the stack; unique across the repos feeding it.",
+          "type": "string"
+        },
+        "node": {
+          "description": "Node names the registered node, the same form deploy-root.yaml uses.",
+          "type": "string"
+        },
+        "node_id": {
+          "description": "NodeID is the superseded way to name the node, still read for files already committed.",
+          "type": "string"
+        },
+        "registry_user": {
+          "description": "RegistryUser is the user of a private registry; its password is set on the\nstack, never in this file.",
+          "type": "string"
+        },
+        "service": {
+          "description": "Service is the deploy.yaml service (or job) whose image rolls.",
+          "type": "string"
+        },
+        "space": {
+          "description": "Space is the space on the node that runs Service.",
+          "type": "string"
+        },
+        "tag_pattern": {
+          "description": "TagPattern is the regexp a tag must match to roll; empty means the publish\ntag format YYYYMMDD-HHMM-<sha>.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/lalternativefabrique/sklp/main/schema/image-watches.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Schema for .sklp/image-watches.yaml: the images a node rolls when the registry gains a matching tag, generated from domain.WatchFile.",
+  "properties": {
+    "watches": {
+      "items": {
+        "$ref": "#/$defs/WatchFileEntry"
+      },
+      "type": "array"
+    }
+  },
+  "title": "sklp image-watches",
+  "type": "object"
+}
