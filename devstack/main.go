@@ -28,12 +28,18 @@ func Main(args []string) int {
 	// with the launch flags below — and before the positional <stack>
 	// so a stack can never shadow a sub-verb.
 	if len(args) > 0 && args[0] == "down" {
-		relayDownLima(args[1:])
+		relayToRunningVM(args[1:])
 		return RunDown(args[1:])
 	}
 	// `sklp dev clean` moved to the single housekeeping verb. Kept as a routed
 	// sub-verb rather than falling through to the launcher, which would read
 	// "clean" as a stack name and fail with a confusing "no such stack".
+	if len(args) > 0 && args[0] == "ls" {
+		return RunLs(args[1:])
+	}
+	if len(args) > 0 && args[0] == "logs" {
+		return RunLogs(args[1:])
+	}
 	if len(args) > 0 && args[0] == "forward" {
 		return RunForward(args[1:])
 	}

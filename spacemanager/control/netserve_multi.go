@@ -152,7 +152,7 @@ func newMultiMuxWithTokens(reg *Registry, materialize Materializer, tokens *toke
 			return
 		}
 		if space, rest, ok := splitSpacePath(r.URL.Path); ok {
-			if err := validSpaceName(space); err != nil {
+			if err := ValidSpaceName(space); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}

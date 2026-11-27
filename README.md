@@ -52,6 +52,7 @@ you develop in.
 | `sklp space up <name>` | Builds a closed environment from `.sklp/space.yaml` (base image, toolchains, packages) and drops you in |
 | `sklp deploy apply <stack>` | Applies `.sklp/<stack>/deploy.yaml` to a node, local or remote, over TLS with a bearer token |
 | `sklp deploy ls / logs / exec` | Pilots a running node from your workstation. No SSH needed |
+| `sklp mcp [-context <name>]` | Serves sklp to an AI agent over MCP (stdio): dev stacks, spaces, pipelines, and with `-context` that node (apply, logs, exec…); `-read-only` serves only the tools that read |
 | `sklet reconcile` | On the node: polls Git, applies what it declares, rolls out, soaks, rolls back |
 | `sklet upgrade` | Replaces itself from the published build, health-checks, rolls back if it does not stay up |
 
@@ -171,6 +172,12 @@ Then from your workstation:
 sklp deploy login --context prod --server https://<node>:6464 --token <T> --ca-fingerprint <FP> --space production
 sklp deploy apply api -context prod
 sklp deploy logs api -f
+```
+
+Or hand it all to your agent, in its `.mcp.json`:
+
+```json
+{"mcpServers": {"sklp": {"command": "sklp", "args": ["mcp", "-context", "prod"]}}}
 ```
 
 ## macOS

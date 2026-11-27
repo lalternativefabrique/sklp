@@ -8,12 +8,12 @@ import (
 
 func TestValidSpaceName(t *testing.T) {
 	for _, ok := range []string{"production", "acme-production", "www", "nats_global", "Staging1"} {
-		if err := validSpaceName(ok); err != nil {
+		if err := ValidSpaceName(ok); err != nil {
 			t.Errorf("%q rejected: %v", ok, err)
 		}
 	}
 	for _, bad := range []string{"", ".", "..", "../x", "a/b", "a.b", "-x", "a b"} {
-		if err := validSpaceName(bad); err == nil {
+		if err := ValidSpaceName(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
 	}
