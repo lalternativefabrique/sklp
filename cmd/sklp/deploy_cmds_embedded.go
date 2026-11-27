@@ -48,11 +48,12 @@ func deployLsCommand() cli.Command {
 // runc state or deploy.yaml — so it is consistent from any directory and is
 // honest when no supervisor is up. Returns the process exit code.
 func runDeployPs(space string, nf *netFlags) int {
-	// No -space (and no remote --server): fan out across every live space on the
-	// host — the multi-space view. A remote target or an explicit -space keeps the
-	// single-space path (a remote host serves one space per endpoint today).
+	// No -space: fan out across every space the node runs, local or remote.
 	if space == "" && !nf.remote() {
 		return runDeployPsAll()
+	}
+	if space == "" {
+		return runDeployPsNode(nf)
 	}
 	target := space
 	if target == "" {
@@ -105,6 +106,38 @@ func runDeployPsAll() int {
 	fmt.Fprintln(w, "SPACE\tSERVICE\tINSTANCE\tSTATUS")
 	for _, sp := range spaces {
 		client, err := control.Dial(sp)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sklp deploy ls: space %q: %v\n", sp, err)
+			continue
+		}
+		state, err := client.State(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sklp deploy ls: space %q: %v\n", sp, err)
+			continue
+		}
+		writeSpaceState(w, sp, state)
+	}
+	w.Flush()
+	return 0
+}
+
+// runDeployPsNode is the multi-space view of a remote node: its inventory,
+// then each space's state through the same endpoint.
+func runDeployPsNode(nf *netFlags) int {
+	ctx := context.Background()
+	spaces, err := nodeSpaces(ctx, nf)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "sklp deploy ls:", err)
+		return 1
+	}
+	if len(spaces) == 0 {
+		fmt.Println("no live spaces on this node")
+		return 0
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
+	fmt.Fprintln(w, "SPACE\tSERVICE\tINSTANCE\tSTATUS")
+	for _, sp := range spaces {
+		client, err := nf.dialClient(sp)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sklp deploy ls: space %q: %v\n", sp, err)
 			continue
