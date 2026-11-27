@@ -413,3 +413,20 @@ func TestKVListRollsIsNewestFirst(t *testing.T) {
 		t.Fatalf("got %s then %s, want newest first", rolls[0].ToTag, rolls[1].ToTag)
 	}
 }
+
+func TestKVListReturnsDisabledWatchesToo(t *testing.T) {
+	ctx := context.Background()
+	r := testKVRepo(t)
+	on := kvWatch(t, "n1/b", "web")
+	off := kvWatch(t, "n1/a", "web")
+	off.Enabled = false
+	for _, w := range []*domain.Watch{on, off} {
+		if err := r.Save(ctx, w); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := r.List(ctx)
+	if err != nil || len(got) != 2 || got[0].StackID != "n1/a" {
+		t.Fatalf("List = %d watches (first %q), %v", len(got), got[0].StackID, err)
+	}
+}

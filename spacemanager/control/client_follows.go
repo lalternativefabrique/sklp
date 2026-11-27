@@ -95,3 +95,19 @@ func (c cancelReadCloser) Close() error {
 	c.cancel()
 	return err
 }
+
+func (c *Client) Watches(ctx context.Context) (WatchesResponse, error) {
+	var out WatchesResponse
+	if err := c.getJSON(ctx, RouteWatches, &out); err != nil {
+		return WatchesResponse{}, err
+	}
+	return out, nil
+}
+
+func (c *Client) Manifest(ctx context.Context) (ManifestResponse, error) {
+	var out ManifestResponse
+	if err := c.getJSON(ctx, c.route(RouteManifest), &out); err != nil {
+		return ManifestResponse{}, err
+	}
+	return out, nil
+}

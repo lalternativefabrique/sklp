@@ -145,7 +145,45 @@ const (
 	// itself from: GET lists them, POST {repo, branch, name} adds one,
 	// DELETE RouteFollows/<name> drops it.
 	RouteFollows = "/v1/follows"
+
+	// RouteWatches (node-scoped, GET) lists the image watches this node rolls
+	// itself and their latest rolls. Credentials never leave the node.
+	RouteWatches = "/v1/watches"
 )
+
+// WatchEntry is one image watch a node rolls on its own.
+type WatchEntry struct {
+	Name          string      `json:"name"`
+	Repo          string      `json:"repo"`
+	Space         string      `json:"space"`
+	Service       string      `json:"service"`
+	Image         string      `json:"image"`
+	TagPattern    string      `json:"tag_pattern"`
+	CurrentTag    string      `json:"current_tag"`
+	Status        string      `json:"status"`
+	HeldTag       string      `json:"held_tag,omitempty"`
+	PinnedTag     string      `json:"pinned_tag,omitempty"`
+	LastError     string      `json:"last_error,omitempty"`
+	LastCheckedAt *time.Time  `json:"last_checked_at,omitempty"`
+	LastRolledAt  *time.Time  `json:"last_rolled_at,omitempty"`
+	Rolls         []RollEntry `json:"rolls"`
+}
+
+// RollEntry is one roll of a watch, newest first.
+type RollEntry struct {
+	FromTag    string     `json:"from_tag"`
+	ToTag      string     `json:"to_tag"`
+	Result     string     `json:"result"`
+	Error      string     `json:"error,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+}
+
+// WatchesResponse is the GET RouteWatches answer.
+type WatchesResponse struct {
+	Node    string       `json:"node"`
+	Watches []WatchEntry `json:"watches"`
+}
 
 // FollowRequest asks a node to follow a public repo.
 type FollowRequest struct {

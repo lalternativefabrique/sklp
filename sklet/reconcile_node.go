@@ -43,6 +43,7 @@ type nodeReconcile struct {
 func startNodeReconcile(ctx context.Context, listen string) *nodeReconcile {
 	n := &nodeReconcile{agentCtx: ctx, listen: listen, log: slog.Default()}
 	control.SetFollows(n)
+	control.SetWatches(n)
 	if reconcileConfigured() {
 		if err := n.ensure(); err != nil {
 			fmt.Fprintf(os.Stderr, "sklet agent: reconcile not started: %v\n", err)
