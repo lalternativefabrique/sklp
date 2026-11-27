@@ -98,9 +98,9 @@ func (l *lineRing) push() {
 	}
 }
 
-func nonNil(lines []string) []string {
+func nonNil[T any](lines []T) []T {
 	if lines == nil {
-		return []string{}
+		return []T{}
 	}
 	return lines
 }

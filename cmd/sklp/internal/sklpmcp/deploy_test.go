@@ -131,6 +131,16 @@ func newFakeNode(t *testing.T) *fakeNode {
 		fmt.Fprintf(w, "hello\ntoken=%s\n", testToken)
 		w.Header().Set(control.HeaderExecExitCode, "3")
 	})
+	mux.HandleFunc("GET /v1/watches", func(w http.ResponseWriter, r *http.Request) {
+		rolls := make([]control.RollEntry, 8)
+		for i := range rolls {
+			rolls[i] = control.RollEntry{FromTag: "v1.10.3", ToTag: "v1.10.4", Result: "rolled"}
+		}
+		writeJSON(w, 200, control.WatchesResponse{Node: "demo", Watches: []control.WatchEntry{
+			{Name: "whoami", Repo: "hello", Space: "rolling-demo", Service: "web", Image: "traefik/whoami", CurrentTag: "v1.10.4", Status: "ok", Rolls: rolls},
+			{Name: "api", Repo: "other", Space: "other", Service: "api", Image: "x/api", CurrentTag: "1", Status: "error", LastError: "pull " + testToken},
+		}})
+	})
 	mux.HandleFunc("GET /v1/follows", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, control.FollowsResponse{Node: "demo", Follows: []control.FollowEntry{{Name: "hello", Repo: "https://github.com/moi/hello", Branch: "main"}}})
 	})
@@ -470,7 +480,7 @@ func TestProtocolEndToEnd(t *testing.T) {
 			t.Fatalf("%s has no description or schema", tl.Name)
 		}
 	}
-	if len(byName) != 28 {
+	if len(byName) != 29 {
 		t.Fatalf("%d tools listed", len(byName))
 	}
 	for _, name := range writeTools {
@@ -504,7 +514,7 @@ func TestReadOnlyHidesAndRefusesDestructiveTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 14 {
+	if len(tools.Tools) != 15 {
 		t.Fatalf("%d tools in read-only mode", len(tools.Tools))
 	}
 	for _, tl := range tools.Tools {
@@ -556,5 +566,23 @@ func TestFollowFollowsAndUnfollow(t *testing.T) {
 	}
 	if res, text := h.call("deploy_unfollow", map[string]any{"name": "locked"}); !res.IsError || text != "the node refused the context's credentials (status 401)" {
 		t.Fatalf("locked: %v %q", res.IsError, text)
+	}
+}
+
+func TestDeployWatchesIsFilteredBoundedAndRedacted(t *testing.T) {
+	h := newHarness(t, false)
+	var all watchesOut
+	h.ok("deploy_watches", nil, &all)
+	if all.Node != "demo" || len(all.Watches) != 2 || len(all.Watches[0].Rolls) != maxRollsInWatch {
+		t.Fatalf("watches = %+v", all)
+	}
+	var one watchesOut
+	h.ok("deploy_watches", map[string]any{"space": "rolling-demo"}, &one)
+	if len(one.Watches) != 1 || one.Watches[0].CurrentTag != "v1.10.4" {
+		t.Fatalf("filtered = %+v", one)
+	}
+	_, text := h.call("deploy_watches", map[string]any{"repo": "other"})
+	if strings.Contains(text, testToken) || !strings.Contains(text, "pull") {
+		t.Fatalf("last_error leaked or missing: %q", text)
 	}
 }

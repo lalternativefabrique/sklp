@@ -120,15 +120,6 @@ func (c *Client) State(ctx context.Context) (StateResponse, error) {
 	return out, nil
 }
 
-// Manifest reads the space's declared manifest.
-func (c *Client) Manifest(ctx context.Context) (ManifestResponse, error) {
-	var out ManifestResponse
-	if err := c.getJSON(ctx, c.route(RouteManifest), &out); err != nil {
-		return ManifestResponse{}, err
-	}
-	return out, nil
-}
-
 func (c *Client) Restores(ctx context.Context) (RestoresResponse, error) {
 	var out RestoresResponse
 	if err := c.getJSON(ctx, RouteRestores, &out); err != nil {

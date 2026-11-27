@@ -51,7 +51,7 @@ func (n *node) tools() []toolDef {
 		define(&mcp.Tool{Name: "deploy_run_job", Description: "Re-run a oneshot job of a space that reached a terminal state. Fails if a run is in flight."}, destructive, n.runJob),
 		define(&mcp.Tool{Name: "deploy_delete", Description: "Stop a space and remove its manifest so it does not come back. " +
 			"With volumes=true its named volumes, and the data in them, are destroyed too, irreversibly."}, destructive, n.deleteSpace),
-	}, n.followTools()...)
+	}, append(n.followTools(), n.watchTools()...)...)
 }
 
 type noInput struct{}
