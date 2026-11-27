@@ -120,6 +120,10 @@ func newMultiMuxWithTokens(reg *Registry, materialize Materializer, tokens *toke
 			serveFollows(w, r)
 			return
 		}
+		if r.URL.Path == RouteWatches {
+			serveWatches(w, r)
+			return
+		}
 		if r.URL.Path == RoutePublicNIC {
 			servePublicNIC(w, r)
 			return

@@ -153,6 +153,16 @@ func (r *KVRepository) FindByID(ctx context.Context, id string) (*domain.Watch, 
 	return nil, nil
 }
 
+// List returns every watch, enabled or not, in a stable order.
+func (r *KVRepository) List(ctx context.Context) ([]*domain.Watch, error) {
+	watches, err := r.all(ctx, ">")
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(watches, func(i, j int) bool { return watches[i].StackID+watches[i].Name < watches[j].StackID+watches[j].Name })
+	return watches, nil
+}
+
 func (r *KVRepository) FindByStackID(ctx context.Context, stackID string) ([]*domain.Watch, error) {
 	return r.all(ctx, stackID+".*")
 }

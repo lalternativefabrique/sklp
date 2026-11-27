@@ -95,3 +95,11 @@ func (c cancelReadCloser) Close() error {
 	c.cancel()
 	return err
 }
+
+func (c *Client) Watches(ctx context.Context) (WatchesResponse, error) {
+	var out WatchesResponse
+	if err := c.getJSON(ctx, RouteWatches, &out); err != nil {
+		return WatchesResponse{}, err
+	}
+	return out, nil
+}
