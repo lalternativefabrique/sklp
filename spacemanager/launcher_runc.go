@@ -68,7 +68,7 @@ func (l *runcLauncher) Start(ctx context.Context, svc Service) (int, error) {
 	// from them (preferred over the stored credentials). No-op when unset.
 	ctx = space.WithRegistryAuths(ctx, l.auths)
 	return l.rt.Start(ctx, space.DeployService{
-		ControlSocketDir: l.controlSocketDir(svc.Name),
+		ControlSocketDir: l.controlSocketDir(svc.Service),
 		Name:             svc.Name,
 		Image:            svc.Image,
 		Command:          svc.Command,
@@ -87,6 +87,9 @@ func (l *runcLauncher) Start(ctx context.Context, svc Service) (int, error) {
 }
 
 func (l *runcLauncher) controlSocketDir(service string) string {
+	if service == "" {
+		return ""
+	}
 	if _, ok := grants.Find(l.space, service); !ok {
 		return ""
 	}
