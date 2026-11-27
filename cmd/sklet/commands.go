@@ -35,6 +35,7 @@ func rootCommand() cli.Command {
 			reconcileCommand(),
 			hostCommand(),
 			tokenCommand(),
+			consoleCommand(),
 			gatewayCommand(),
 			spaceCommand(),
 			versionCommand(),

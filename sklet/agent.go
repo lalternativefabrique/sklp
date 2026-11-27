@@ -288,6 +288,7 @@ func RunAgent(listen, advertise, gatewayMode string, meshOpts MeshOptions, publi
 		}
 		defer startNodeReconcile(ctx, listen).Close()
 	}
+	go control.ServeGrants(ctx, reg, materialize)
 
 	if err := sc.RunAll(ctx, opts); err != nil {
 		return err

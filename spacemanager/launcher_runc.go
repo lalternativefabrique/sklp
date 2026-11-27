@@ -2,6 +2,7 @@ package spacemanager
 
 import (
 	"context"
+	"github.com/lalternativefabrique/sklp/spacemanager/grants"
 
 	"github.com/lalternativefabrique/sklp/space"
 	"github.com/lalternativefabrique/sklp/space/ociproc"
@@ -12,6 +13,7 @@ import (
 // execLauncher instead to avoid needing container privileges.
 type runcLauncher struct {
 	rt    *space.Space
+	space string
 	auths map[string]space.RegistryAuth // private-registry pull creds, attached to each Start ctx
 }
 
@@ -58,7 +60,7 @@ func NewRuncLauncherWithEgress(spaceName string, allowEgress []string) (Launcher
 	if len(allowEgress) > 0 {
 		rt.RestrictEgress(allowEgress)
 	}
-	return &runcLauncher{rt: rt}, runcReadyChecker{rt: rt}, nil
+	return &runcLauncher{rt: rt, space: spaceName}, runcReadyChecker{rt: rt}, nil
 }
 
 func (l *runcLauncher) Start(ctx context.Context, svc Service) (int, error) {
@@ -66,13 +68,14 @@ func (l *runcLauncher) Start(ctx context.Context, svc Service) (int, error) {
 	// from them (preferred over the stored credentials). No-op when unset.
 	ctx = space.WithRegistryAuths(ctx, l.auths)
 	return l.rt.Start(ctx, space.DeployService{
-		Name:         svc.Name,
-		Image:        svc.Image,
-		Command:      svc.Command,
-		Env:          svc.Env,
-		Volumes:      svc.Volumes,
-		Port:         svc.Port,
-		Capabilities: svc.Capabilities,
+		ControlSocketDir: l.controlSocketDir(svc.Name),
+		Name:             svc.Name,
+		Image:            svc.Image,
+		Command:          svc.Command,
+		Env:              svc.Env,
+		Volumes:          svc.Volumes,
+		Port:             svc.Port,
+		Capabilities:     svc.Capabilities,
 		Resources: ociproc.Limits{
 			CPUCores:    svc.Resources.CPUCores,
 			MemoryBytes: svc.Resources.MemoryBytes,
@@ -81,6 +84,13 @@ func (l *runcLauncher) Start(ctx context.Context, svc Service) (int, error) {
 		RequireResources: svc.Resources.Require,
 		ReapInit:         true,
 	})
+}
+
+func (l *runcLauncher) controlSocketDir(service string) string {
+	if _, ok := grants.Find(l.space, service); !ok {
+		return ""
+	}
+	return grants.Dir(l.space, service)
 }
 
 func (l *runcLauncher) Stop(id string) { l.rt.Stop(id) }
