@@ -23,6 +23,9 @@ import (
 // Validation runs unconditionally — the cost is O(steps + services) on a
 // schema already parsed in memory.
 func validatePipeline(p Pipeline) error {
+	if p.Version != 0 && p.Version != 1 {
+		return fmt.Errorf("version %d: 1 is the only pipeline version", p.Version)
+	}
 	for _, step := range p.Steps {
 		for _, name := range step.Services {
 			if _, ok := p.Services[name]; !ok {
