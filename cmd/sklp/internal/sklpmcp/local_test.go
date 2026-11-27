@@ -42,6 +42,8 @@ func fakeSklp(args []string) int {
 		fmt.Println("hello from", strings.Join(args[len(args)-2:], " "))
 		fmt.Fprintln(os.Stderr, "token", os.Getenv("SKLPMCP_LEAK"))
 		return 3
+	case args[0] == "skills":
+		fmt.Printf("# guide %s for %s\n", args[len(args)-1], args[2])
 	case verb == "dev ls":
 		fmt.Println(os.Getenv("SKLPMCP_DEV_LS"))
 	case verb == "dev logs":
@@ -240,7 +242,7 @@ func TestReadOnlyServesOnlyLocalReads(t *testing.T) {
 	for _, tl := range tools.Tools {
 		names = append(names, tl.Name)
 	}
-	want := "deploy_contexts,dev_logs,dev_ls,dev_validate,job_status,space_get,space_ls,stacks"
+	want := "deploy_contexts,dev_logs,dev_ls,dev_validate,job_status,pipeline_validate,sklp_draft,sklp_guide,sklp_schema,space_get,space_ls,stacks"
 	if got := strings.Join(slices.Sorted(slices.Values(names)), ","); got != want {
 		t.Fatalf("read-only tools = %s, want %s", got, want)
 	}
@@ -250,5 +252,68 @@ func TestReadOnlyServesOnlyLocalReads(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(h.calls); strings.Contains(string(data), "space down") {
 		t.Fatal("space down reached sklp in read-only mode")
+	}
+}
+
+func TestGuideIsTheRepoTailoredSkill(t *testing.T) {
+	h := newLocalHarness(t, false)
+	var out guideOut
+	h.ok("sklp_guide", map[string]any{"repo": h.repo, "contract": "space"}, &out)
+	if out.Guide != "# guide init-config for "+h.repo+"\n" {
+		t.Fatalf("guide = %q", out.Guide)
+	}
+	if res, text := h.call("sklp_guide", map[string]any{"repo": h.repo, "contract": "deploy"}); !res.IsError || !strings.Contains(text, "ci, dev, operator, publish, space") {
+		t.Fatalf("unknown contract: %v %q", res.IsError, text)
+	}
+}
+
+func TestDraftScansTheRepoAndWritesNothing(t *testing.T) {
+	h := newLocalHarness(t, false)
+	_ = os.WriteFile(filepath.Join(h.repo, "go.mod"), []byte("module example.com/app\n\ngo 1.26\n"), 0o644)
+	var ci draftOut
+	h.ok("sklp_draft", map[string]any{"repo": h.repo, "contract": "ci"}, &ci)
+	if ci.Path != ".sklp/pipelines/ci.yaml" || !ci.Exists || !strings.Contains(ci.YAML, "kind: pipeline") {
+		t.Fatalf("ci draft = %+v", ci)
+	}
+	var dev draftOut
+	h.ok("sklp_draft", map[string]any{"repo": h.repo, "contract": "dev", "stack": "web"}, &dev)
+	if dev.Path != ".sklp/web/dev.yaml" || !dev.Exists {
+		t.Fatalf("dev draft = %+v", dev)
+	}
+	if data, _ := os.ReadFile(filepath.Join(h.repo, ".sklp", "pipelines", "ci.yaml")); strings.Contains(string(data), "go test") {
+		t.Fatal("sklp_draft wrote the file")
+	}
+	if res, _ := h.call("sklp_draft", map[string]any{"repo": h.repo, "contract": "dev", "stack": "../x"}); !res.IsError {
+		t.Fatal("a path-like stack must be refused")
+	}
+}
+
+func TestSchemaIsThePublishedPipelineSchema(t *testing.T) {
+	h := newLocalHarness(t, false)
+	var out struct {
+		Schema struct {
+			ID string `json:"$id"`
+		} `json:"schema"`
+	}
+	h.ok("sklp_schema", nil, &out)
+	if !strings.HasSuffix(out.Schema.ID, "/pipeline/pipeline.schema.json") {
+		t.Fatalf("schema id = %q", out.Schema.ID)
+	}
+}
+
+func TestPipelineValidate(t *testing.T) {
+	h := newLocalHarness(t, false)
+	dir := filepath.Join(h.repo, ".sklp", "pipelines")
+	_ = os.WriteFile(filepath.Join(dir, "ci.yaml"), []byte("version: 1\nkind: pipeline\nname: ci\nsteps:\n  - name: vet\n    run: go vet ./...\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte("version: 1\nkind: pipeline\nname: bad\nsteps:\n  - name: t\n    services: [ghost]\n    run: echo\n"), 0o644)
+	var ok validateOut
+	h.ok("pipeline_validate", map[string]any{"repo": h.repo, "pipeline": "ci"}, &ok)
+	if !ok.Valid || strings.Join(ok.Steps, ",") != "vet" {
+		t.Fatalf("ci = %+v", ok)
+	}
+	var bad validateOut
+	h.ok("pipeline_validate", map[string]any{"repo": h.repo, "pipeline": "bad"}, &bad)
+	if bad.Valid || bad.Error == "" {
+		t.Fatalf("bad = %+v", bad)
 	}
 }

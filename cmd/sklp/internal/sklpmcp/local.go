@@ -103,7 +103,7 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 }
 
 func (l *local) tools() []toolDef {
-	return []toolDef{
+	return append([]toolDef{
 		define(&mcp.Tool{Name: "stacks", Description: "List what a repository declares under .sklp/: each stack with its contracts " +
 			"(dev, deploy, ...) and the pipelines (ci, publish, ...). Start here."}, read, l.stacks),
 
@@ -126,7 +126,7 @@ func (l *local) tools() []toolDef {
 		define(&mcp.Tool{Name: "job_status", Description: "Show a background job (dev_up, run_pipeline): status, exit code and the last lines of its output. " +
 			"Without an id, lists the jobs of this server, newest first."}, read, l.jobStatus),
 		define(&mcp.Tool{Name: "job_cancel", Description: "Stop a running job the way Ctrl-C would, so sklp tears down what it started."}, write, l.jobCancel),
-	}
+	}, l.contractTools()...)
 }
 
 type repoInput struct {
