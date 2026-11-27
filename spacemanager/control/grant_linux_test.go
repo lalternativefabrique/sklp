@@ -46,6 +46,19 @@ func TestGrantScopes(t *testing.T) {
 		{grants.Admin, "POST", "/v1/spaces/hello/dial/db", false},
 		{grants.Admin, "PUT", "/v1/spaces/hello/gateway/routes", false},
 		{grants.Admin, "GET", "/v1/spaces/../token/rotate", false},
+		{grants.Admin, "GET", "/v1/spaces/hello/host/public-nic", false},
+		{grants.Admin, "GET", "/v1/spaces/hello/spaces", false},
+		{grants.Admin, "GET", "/v1/spaces/hello/restores", false},
+		{grants.Admin, "POST", "//v1/token/rotate", false},
+		{grants.Admin, "GET", "/v1//follows", false},
+		{grants.Admin, "GET", "/v1/spaces/Hello/state", false},
+		{grants.Admin, "GET", "/v1/spaces/hello/logs/", false},
+		{grants.Admin, "GET", "/v1/spaces/hello/logs/web/../../apply", false},
+		{grants.Admin, "DELETE", "/v1/follows/", false},
+		{grants.Admin, "GET", "/v1/unknown", false},
+		{grants.Admin, "PUT", "/v1/spaces/hello/apply", false},
+		{grants.Admin, "POST", "/v1/spaces/hello/start", true},
+		{grants.Admin, "POST", "/v1/spaces/hello/run/migrate", true},
 	}
 	for _, c := range cases {
 		if got := GrantAllows(c.scope, c.method, c.path); got != c.want {
@@ -76,6 +89,9 @@ func TestGrantSocketAnswersOnlyForTheOwnerItWasGivenTo(t *testing.T) {
 		}
 	})
 	sock := filepath.Join(grants.Dir("playground", "core"), grants.SocketName)
+	if st, err := os.Stat(filepath.Dir(grants.Dir("playground", "core"))); err != nil || st.Mode().Perm() != 0o700 {
+		t.Fatalf("grants parent must be private to the agent: %v %v", st, err)
+	}
 	if st, err := os.Stat(sock); err != nil || st.Mode().Perm() != 0o666 {
 		t.Fatalf("socket: %v %v", st, err)
 	}

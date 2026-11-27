@@ -451,9 +451,9 @@ func buildServiceSpecWithMappings(rootfs string, svc Service, imgEntrypoint, img
 			"options": []string{"nosuid", "noexec", "nodev", "relatime"},
 		})
 	}
-	// OPT-IN dev bind-mounts. svc.DevMounts is nil on the deploy/CI path, so
-	// the slice above stays byte-identical to today's spec there. Only the
-	// `sklp dev` path fills it (repo hot-reload). The mount writes as the
+	// OPT-IN bind-mounts: the repo for `sklp dev` (hot-reload), and on the
+	// deploy path only a granted service's read-only control socket
+	// directory (ADR 0002); every other deployed service gets none. The mount writes as the
 	// host uid (mapped to container uid 0 by uidMappings), so repo files the
 	// container creates stay operator-owned, never root.
 	for _, dm := range svc.DevMounts {
