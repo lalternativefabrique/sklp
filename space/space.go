@@ -750,6 +750,18 @@ func (s *Space) SetACLEdges(edges []ACLEdge) error {
 	return cnet.setACLEdges(edges)
 }
 
+// RouteService pins the instance IPs that receive serviceName's traffic in the
+// space network. A no-op for a standalone space (no network).
+func (s *Space) RouteService(serviceName string, ips []string) error {
+	s.mu.Lock()
+	cnet := s.cnet
+	s.mu.Unlock()
+	if cnet == nil {
+		return nil
+	}
+	return cnet.routeName(serviceName, ips)
+}
+
 // OpenGatewayIngress exposes a service to the HOST GATEWAY without a
 // user-declared host port: it allocates a free loopback port, opens the SAME
 // per-space ingress machinery on it (host 127.0.0.1:<alloc> spliced into the

@@ -25,14 +25,61 @@ func bridgeMAC(name string) net.HardwareAddr {
 // rotate over them (round-robin DNS), so traffic spreads across replicas
 // without any external load balancer. It is consulted by the DNS resolver on
 // every query, so it is safe for concurrent register/unregister/lookup.
+//
+// Registration follows the network attachment; routing follows the deploy
+// agent. Once the agent has pinned a routed set for a name, lookup answers only
+// the registered IPs in that set, so an instance that is attached but not Ready,
+// or retired by a rollout cutover, receives no new traffic while it stays
+// reachable for the east-west ACL (members). A name never pinned answers every
+// registered IP.
 type nameTable struct {
-	mu  sync.Mutex
-	ips map[string][]net.IP // service name -> registered IPs (insertion order)
-	rr  map[string]int      // per-name round-robin cursor
+	mu     sync.Mutex
+	ips    map[string][]net.IP // service name -> registered IPs (insertion order)
+	rr     map[string]int      // per-name round-robin cursor
+	routed map[string][]net.IP // service name -> IPs the agent routes traffic to
 }
 
 func newNameTable() *nameTable {
-	return &nameTable{ips: map[string][]net.IP{}, rr: map[string]int{}}
+	return &nameTable{ips: map[string][]net.IP{}, rr: map[string]int{}, routed: map[string][]net.IP{}}
+}
+
+// route pins the set of IPs that receive traffic for name. An empty set is a
+// valid pin: the name resolves to nothing until an instance is routed.
+func (t *nameTable) route(name string, ips []net.IP) {
+	name = strings.ToLower(name)
+	if name == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.routed[name] = append([]net.IP{}, ips...)
+}
+
+// members returns every IP registered under name, routed or not, in insertion
+// order and without advancing the round-robin cursor.
+func (t *nameTable) members(name string) []net.IP {
+	name = strings.ToLower(name)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]net.IP(nil), t.ips[name]...)
+}
+
+func (t *nameTable) servingLocked(name string) (ips []net.IP, pinned bool) {
+	cur := t.ips[name]
+	routed, pinned := t.routed[name]
+	if !pinned {
+		return cur, false
+	}
+	out := make([]net.IP, 0, len(routed))
+	for _, ip := range cur {
+		for _, r := range routed {
+			if ip.Equal(r) {
+				out = append(out, ip)
+				break
+			}
+		}
+	}
+	return out, true
 }
 
 // register adds ip under name (deduplicated). The name is matched
@@ -73,17 +120,18 @@ func (t *nameTable) unregister(name string, ip net.IP) {
 	t.ips[name] = cur
 }
 
-// lookup returns the registered IPs for name, rotated by one each call so the
+// lookup returns the IPs serving name, rotated by one each call so the
 // first answer round-robins across replicas. The full set is still returned
 // (rotated) so a client that ignores order, or caches all A records, also
-// balances. ok is false when the name is unknown (caller should forward it).
+// balances. ok is false when the name is neither registered nor pinned (caller
+// should forward it); a pinned name with nothing routed is ok with no IPs.
 func (t *nameTable) lookup(name string) (ips []net.IP, ok bool) {
 	name = strings.ToLower(name)
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	cur := t.ips[name]
+	cur, pinned := t.servingLocked(name)
 	if len(cur) == 0 {
-		return nil, false
+		return nil, pinned
 	}
 	off := t.rr[name] % len(cur)
 	t.rr[name] = (t.rr[name] + 1) % len(cur)

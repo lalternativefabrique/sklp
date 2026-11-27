@@ -160,12 +160,24 @@ func renderRoutes(space, service string, routes []route) string {
 		// has no per-router request timeout, so the forwarding timeouts toward
 		// the backend are the closest equivalent it offers. Named per service so
 		// two routes of different services never share one.
-		if r.Timeout > 0 {
+		//
+		// A local backend is the space ingress, which pins each TCP connection to
+		// the replica it resolved at dial time. A pooled keep-alive connection
+		// would keep feeding the previous generation after a rollout cutover, so
+		// connection reuse is disabled, as the native L7 ingress does.
+		pinsReplica := r.BackendHost == ""
+		if r.Timeout > 0 || pinsReplica {
 			transport := name + "-transport"
 			fmt.Fprintf(&services, "        serversTransport: %s\n", transport)
-			fmt.Fprintf(&transports, "    %s:\n      forwardingTimeouts:\n", transport)
-			fmt.Fprintf(&transports, "        dialTimeout: %s\n", durationSeconds(r.Timeout))
-			fmt.Fprintf(&transports, "        responseHeaderTimeout: %s\n", durationSeconds(r.Timeout))
+			fmt.Fprintf(&transports, "    %s:\n", transport)
+			if pinsReplica {
+				transports.WriteString("      maxIdleConnsPerHost: -1\n")
+			}
+			if r.Timeout > 0 {
+				transports.WriteString("      forwardingTimeouts:\n")
+				fmt.Fprintf(&transports, "        dialTimeout: %s\n", durationSeconds(r.Timeout))
+				fmt.Fprintf(&transports, "        responseHeaderTimeout: %s\n", durationSeconds(r.Timeout))
+			}
 		}
 		services.WriteString("        servers:\n")
 		for _, addr := range sorted {

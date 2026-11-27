@@ -252,13 +252,29 @@ func TestRenderRoutes_Timeout(t *testing.T) {
 	}
 }
 
-// A route with no timeout must emit no serversTransport at all.
-func TestRenderRoutes_NoTimeoutNoTransport(t *testing.T) {
+func TestRenderRoutes_LocalBackendDisablesConnectionReuse(t *testing.T) {
 	got := renderRoutes("production", "core", []route{
 		{Host: "api.example.com", Backends: []string{"127.0.0.1:40001"}, TLS: true},
 	})
+	for _, sub := range []string{
+		"serversTransport: production-core-transport",
+		"production-core-transport:\n      maxIdleConnsPerHost: -1\n",
+	} {
+		if !strings.Contains(got, sub) {
+			t.Errorf("local route missing %q\n%s", sub, got)
+		}
+	}
+	if strings.Contains(got, "forwardingTimeouts") {
+		t.Errorf("route without timeout must emit no forwardingTimeouts:\n%s", got)
+	}
+}
+
+func TestRenderRoutes_MeshBackendKeepsConnectionReuse(t *testing.T) {
+	got := renderRoutes("production", "web", []route{
+		{Host: "web.example.com", Backends: []string{"10.99.0.2:443"}, TLS: true, BackendHost: "web.alpha.internal"},
+	})
 	if strings.Contains(got, "serversTransport") {
-		t.Errorf("route without timeout must emit no serversTransport:\n%s", got)
+		t.Errorf("mesh route without timeout must emit no serversTransport:\n%s", got)
 	}
 }
 

@@ -144,10 +144,7 @@ func programACL(bridge, edgesJSON string, names *nameTable) error {
 			return fmt.Errorf("decode acl edges: %w", err)
 		}
 	}
-	script := aclRules(edges, func(name string) []net.IP {
-		ips, _ := names.lookup(name)
-		return ips
-	})
+	script := aclRules(edges, names.members)
 	if script == "" {
 		// No edges declared: flush any prior ACL table so a config that DROPS
 		// its depends_on graph reopens east-west rather than leaving a stale
