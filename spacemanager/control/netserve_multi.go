@@ -180,7 +180,7 @@ func newMultiMuxWithTokens(reg *Registry, materialize Materializer, tokens *toke
 			// typo guard below, kept intact.
 			if !ok && materialize != nil && rest == strings.TrimPrefix(RouteDown, "/v1") && SpaceIsPersisted(space) {
 				if _, err, _ := group.Do(space, func() (any, error) {
-					return nil, materialize(space)
+					return nil, materializeUnlessUp(reg, materialize, space)
 				}); err != nil {
 					http.Error(w, "space "+space+": "+err.Error(), http.StatusInternalServerError)
 					return
@@ -197,7 +197,7 @@ func newMultiMuxWithTokens(reg *Registry, materialize Materializer, tokens *toke
 			// delete, node-d, 2026-08-30).
 			if !ok && materialize != nil && rest == strings.TrimPrefix(RouteApply, "/v1") {
 				_, err, _ := group.Do(space, func() (any, error) {
-					return nil, materialize(space)
+					return nil, materializeUnlessUp(reg, materialize, space)
 				})
 				if err != nil {
 					http.Error(w, "space "+space+": "+err.Error(), http.StatusInternalServerError)
@@ -332,7 +332,7 @@ func serveStart(w http.ResponseWriter, r *http.Request, space string, reg *Regis
 		return
 	}
 	if _, err, _ := group.Do(space, func() (any, error) {
-		return nil, materialize(space)
+		return nil, materializeUnlessUp(reg, materialize, space)
 	}); err != nil {
 		http.Error(w, "space "+space+": "+err.Error(), http.StatusInternalServerError)
 		return
@@ -358,4 +358,14 @@ func newControlServer(handler http.Handler) *http.Server {
 		IdleTimeout:       controlIdleTimeout,
 		ReadHeaderTimeout: controlReadHeaderTimeout,
 	}
+}
+
+// materializeUnlessUp runs inside the singleflight: a request that missed the
+// registry just before another flight registered the space starts a new
+// flight, which must not bring the space up a second time.
+func materializeUnlessUp(reg *Registry, materialize Materializer, space string) error {
+	if _, ok := reg.get(space); ok {
+		return nil
+	}
+	return materialize(space)
 }
