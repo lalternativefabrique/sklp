@@ -1,0 +1,28 @@
+# Imported for production from compose.yml by `sklp init -from compose -to deploy`.
+# 2 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: POSTGRES_PASSWORD (compose defaulted it; never reuse that default in production)
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # import: environment: POSTGRES_PASSWORD was written in clear in compose: it is now ${POSTGRES_PASSWORD}, a secret to set per deployment
+  # import: ports: host port 5432 is not published: the other services reach it at db:5432 inside the space, and a datastore stays off the public interface
+  db:
+    image: postgis/postgis:16-3.4
+    port: 5432
+    env:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ready:
+      log: database system is ready to accept connections
+      timeout: 120s
+
+  # TODO(import): backup: volume(s) natsdata hold this service's data and nothing backs them up: add a backup: block (a command writing an archive to stdout + a cron schedule) and SKLP_BACKUP_TO in env
+  nats:
+    image: nats:2.10
+    command: [-js, -sd, /data]
+    volumes:
+      - natsdata:/data
+    ready:
+      log: Server is ready
+      timeout: 120s

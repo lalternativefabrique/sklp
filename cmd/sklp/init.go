@@ -51,6 +51,7 @@ func initCommand() cli.Command {
 			{Name: "no-run", Type: cli.BoolFlag, Usage: "install skills but do NOT hand off to the agent; just print how to run them"},
 			{Name: "ascii", Type: cli.BoolFlag, Usage: "use ASCII fallback glyphs instead of UTF-8 symbols"},
 			{Name: "from", Type: cli.StringFlag, Usage: "only import an existing setup into .sklp: 'compose' translates compose.yaml / docker-compose.yml into <stack>/dev.yaml and lists the manual actions left"},
+			{Name: "to", Type: cli.StringFlag, StringDefault: "dev", Usage: "with -from compose: 'dev' writes <stack>/dev.yaml from compose + its override; 'deploy' writes the production <stack>/deploy.yaml from compose + compose.prod.yaml"},
 			{Name: "stack", Type: cli.StringFlag, StringDefault: layout.DefaultStack, Usage: "stack directory under .sklp/ the import writes to"},
 		},
 		Run: func(ctx context.Context, args cli.Args) int {
@@ -62,7 +63,7 @@ func initCommand() cli.Command {
 			switch from := args.String("from"); from {
 			case "":
 			case "compose":
-				return runComposeImport(repoAbs, args.String("stack"), args.Bool("force"), args.Bool("ascii"))
+				return runComposeImport(repoAbs, args.String("stack"), args.String("to"), args.Bool("force"), args.Bool("ascii"))
 			default:
 				fmt.Fprintf(os.Stderr, "sklp init: -from %q: only 'compose' is supported\n", from)
 				return 2

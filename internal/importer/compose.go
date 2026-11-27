@@ -652,7 +652,7 @@ func (t *translator) sameNameEnv(s *devService, key, def string, hasDef bool) {
 	}
 }
 
-func (t *translator) reportExpansion(s *devService, field, key string, e expansion) {
+func (t *translator) reportExpansion(s noter, field, key string, e expansion) {
 	where := field
 	if key != "" {
 		where = field + " " + key
@@ -668,7 +668,7 @@ func (t *translator) reportExpansion(s *devService, field, key string, e expansi
 	}
 }
 
-func (t *translator) expandField(s *devService, field, value string) string {
+func (t *translator) expandField(s noter, field, value string) string {
 	if !strings.Contains(value, "$") {
 		return value
 	}
@@ -714,7 +714,7 @@ type portSpec struct {
 
 var portRE = regexp.MustCompile(`^(?:(\[[^\]]*\]|\d+\.\d+\.\d+\.\d+):)?(?:(\d+(?:-\d+)?)?:)?(\d+(?:-\d+)?)(?:/(\w+))?$`)
 
-func (t *translator) parsePorts(s *devService, v any, field string) []portSpec {
+func (t *translator) parsePorts(s noter, v any, field string) []portSpec {
 	var out []portSpec
 	for _, item := range anyList(v) {
 		switch p := item.(type) {

@@ -1,0 +1,26 @@
+# Imported for production from compose.yaml by `sklp init -from compose -to deploy`.
+# 7 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# TODO(import): services: proxy (traefik:v3.1) is the edge proxy of the compose setup: it is left out, the node gateway terminates TLS and routes hosts — check the routes under spaces: cover what it served
+# TODO(import): include: included compose files [other.yaml] are not imported: re-run on a merged file (`docker compose config > compose.yaml`) or add their services by hand
+# TODO(import): secrets: top-level secrets are not supported: pass values as `${VAR}` secrets in env, bake files into the image (`COPY`)
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # TODO(import): image: compose builds this service from ./docker/worker: publish the image to your registry with an immutable tag (a `kind: publish` pipeline under .sklp/pipelines/), declare the registry under registries:, and set image: to it
+  # import: ports: range 9000-9002:9000-9002 published on every host address, as compose did
+  # import: ports: UDP 5353 (container 53) published on every host address, as compose did
+  # TODO(import): networks: aliases jobs do not resolve on a node, only "worker" does: replace those hostnames in the other services' config
+  # TODO(import): depends_on: ghost is not imported (unknown, behind a profile, or the edge proxy): drop the dependency or add the service
+  # TODO(import): depends_on: proxy is not imported (unknown, behind a profile, or the edge proxy): drop the dependency or add the service
+  # import: ready: no healthcheck: a TCP probe on port 9000 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  worker:
+    image: registry.example.com/unsupported/worker:unpublished
+    port: 9000
+    ports:
+      - 0.0.0.0:9000-9002:9000-9002
+      - 0.0.0.0:5353:53/udp
+    ready:
+      tcp: localhost:9000
+      timeout: 60s

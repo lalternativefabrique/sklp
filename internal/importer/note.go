@@ -55,3 +55,7 @@ func ManualCount(notes []Note) int {
 	}
 	return n
 }
+
+type noter interface {
+	note(sev Severity, field, format string, args ...any)
+}

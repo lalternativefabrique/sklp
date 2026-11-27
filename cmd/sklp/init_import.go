@@ -37,12 +37,39 @@ func importCompose(repoAbs, stack string, force bool) (*composeImported, error) 
 	return &composeImported{res: res, rel: rel}, nil
 }
 
-func runComposeImport(repoAbs, stack string, force, ascii bool) int {
+// importComposeDeploy translates the repo's compose files into the stack's
+// production deploy.yaml, with the same draft rule as importCompose.
+func importComposeDeploy(repoAbs, stack string, force bool) (*composeImported, error) {
+	runnables, _ := repofacts.ScanRunnable(repoAbs)
+	res, err := importer.ImportComposeDeploy(importer.ComposeOptions{Root: repoAbs, Stack: stack, Runnables: runnables})
+	if err != nil || res == nil {
+		return nil, err
+	}
+	rel := filepath.Join(".sklp", stack, "deploy.yaml")
+	if !force && fileExists(filepath.Join(repoAbs, rel)) {
+		rel += ".draft"
+	}
+	if err := writeDraft(filepath.Join(repoAbs, rel), res.YAML, force || strings.HasSuffix(rel, ".draft")); err != nil {
+		return nil, err
+	}
+	return &composeImported{res: res, rel: rel}, nil
+}
+
+func runComposeImport(repoAbs, stack, to string, force, ascii bool) int {
+	importFn, verify := importCompose, fmt.Sprintf("sklp dev %s --validate", stack)
+	switch to {
+	case "", "dev":
+	case "deploy":
+		importFn, verify = importComposeDeploy, fmt.Sprintf("sklp deploy apply %s -context <node>", stack)
+	default:
+		fmt.Fprintf(os.Stderr, "sklp init: -to %q: want dev or deploy\n", to)
+		return 2
+	}
 	rep := reporter.New(os.Stderr, reporter.Options{ASCII: ascii})
 	rep.Header("sklp init -from compose")
 	start := time.Now()
 	rep.StepStarted("importing compose")
-	imp, err := importCompose(repoAbs, stack, force)
+	imp, err := importFn(repoAbs, stack, force)
 	if err != nil {
 		rep.StepFinished("importing compose", reporter.StatusFailed, time.Since(start), "")
 		fmt.Fprintf(os.Stderr, "sklp init: %v\n", err)
@@ -55,9 +82,9 @@ func runComposeImport(repoAbs, stack string, force, ascii bool) int {
 	}
 	manual := importer.ManualCount(imp.res.Notes)
 	rep.StepFinished("importing compose", reporter.StatusPassed, time.Since(start), fmt.Sprintf("%d manual action(s)", manual))
-	next := fmt.Sprintf("sklp dev %s", stack)
+	next := strings.TrimSuffix(verify, " --validate")
 	if manual > 0 {
-		next = fmt.Sprintf("resolve TODO(import) in %s · sklp dev %s --validate", imp.rel, stack)
+		next = fmt.Sprintf("resolve TODO(import) in %s · %s", imp.rel, verify)
 	}
 	rep.Finalize("IMPORT", reporter.StatusPassed, time.Since(start), nil,
 		[]reporter.FinalField{{Label: "next", Value: next}})

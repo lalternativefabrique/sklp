@@ -1,0 +1,86 @@
+# Imported for production from compose.yaml + compose.prod.yaml by `sklp init -from compose -to deploy`.
+# 4 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: files: compose.override.yaml is not imported: the default override holds local development tweaks; put production-only settings in compose.prod.yaml and import again
+# TODO(import): services: traefik (traefik:v3.1) is the edge proxy of the compose setup: it is left out, the node gateway terminates TLS and routes hosts — check the routes under spaces: cover what it served
+# import: profiles: services behind a compose profile are left out of production: adminer — add them by hand if they belong there
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space prod-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, SESSION_SECRET (compose defaulted it; never reuse that default in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, CACHE_TTL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # TODO(import): environment: environment CACHE_TTL: compose used "300" only when CACHE_TTL is set; deploy.yaml has no such operator — write the value it should have
+  # import: environment: environment PUBLIC_URL: DOMAIN inlined from .env.example
+  # import: labels: routes shop.acme.test, www.acme.test taken from the reverse-proxy labels; the other labels are dropped
+  # import: deploy: restart_policy dropped: the node restarts with backoff and rolls with soak + automatic rollback (ready.soak)
+  # import: restart: dropped: the node restarts a service that exits, with backoff; a run-to-completion task belongs under jobs:
+  # import: ready: no healthcheck: a TCP probe on port 8000 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  app:
+    image: ghcr.io/acme/shop:1.4.2
+    command: [sh, -c, exec shop serve --workers $WORKERS --port 8000]
+    replicas: 2
+    port: 8000
+    env:
+      CACHE_TTL: ${CACHE_TTL}
+      DATABASE_URL: mysql://shop:${MYSQL_PASSWORD}@db:3306/shop
+      LOG_FORMAT: json
+      PUBLIC_URL: https://acme.test
+      SESSION_SECRET: ${SESSION_SECRET}
+      WORKERS: "4"
+    depends_on: [db]
+    resources:
+      cpu: "0.5"
+      memory: 512Mi
+    ready:
+      tcp: localhost:8000
+      timeout: 60s
+
+  # import: labels: routes admin.acme.test taken from the reverse-proxy labels; the other labels are dropped
+  # import: ready: no healthcheck: a TCP probe on port 9000 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  admin:
+    image: ghcr.io/acme/shop-admin:1.4.2
+    port: 9000
+    resources:
+      memory: 1Gi
+    ready:
+      tcp: localhost:9000
+      timeout: 60s
+
+  # import: healthcheck: `mysqladmin ping -h localhost` replaced by the log line "ready for connections": the node cannot exec a probe
+  # TODO(import): backup: volume(s) dbdata hold this service's data and nothing backs them up: add a backup: block (a command writing an archive to stdout + a cron schedule) and SKLP_BACKUP_TO in env
+  db:
+    image: mysql:8.4
+    env:
+      MYSQL_DATABASE: shop
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: shop
+    volumes:
+      - dbdata:/var/lib/mysql
+    ready:
+      log: ready for connections
+      timeout: 120s
+
+  # import: ports: UDP 7882 (container 7882) published on every host address, as compose did
+  # import: cap_add: copied to capabilities:; the node's admission policy refuses the dangerous ones (SYS_ADMIN, NET_ADMIN, ...) at apply
+  voice:
+    image: ghcr.io/acme/voice:2.0.0
+    ports:
+      - 0.0.0.0:7882:7882/udp
+    capabilities: [NET_RAW]
+
+spaces:
+  prod-production:
+    gateway:
+      routes:
+        - service: app
+          host: shop.acme.test
+        - service: app
+          host: www.acme.test
+        - service: admin
+          host: admin.acme.test
