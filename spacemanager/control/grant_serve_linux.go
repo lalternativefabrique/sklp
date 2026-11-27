@@ -78,6 +78,15 @@ func syncGrantListeners(live map[string]*grantListener, api http.Handler) {
 
 func listenGrant(g grants.Grant, api http.Handler) (*grantListener, error) {
 	dir := grants.Dir(g.Space, g.Service)
+	// The parent stays private to the agent's user: no other account on the
+	// host reaches a socket. The container is not affected, it sees the
+	// bind-mounted directory itself, not its parents.
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(filepath.Dir(dir), 0o700); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}

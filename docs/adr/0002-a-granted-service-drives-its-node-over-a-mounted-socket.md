@@ -26,10 +26,22 @@ cannot ask for it.
   - read: spaces, state, manifests, datastores, logs, follows, watches, restores.
   - operate: read, plus follow, unfollow and restart.
   - admin: operate, plus apply, delete, exec, run.
-  - never: token rotation, mesh peers, gateway control, public NIC, dial.
+  - never: token rotation, mesh peers, gateway control, public NIC, dial,
+    gateway routes. Routes are an allowlist: anything not listed is refused at
+    every scope, and a path that is not canonical is refused, not interpreted.
 - Writes are logged by the agent. Revoking closes the socket within seconds.
 
 ## Consequences
+
+Scopes are node-wide, not limited to the granted space: `read` reads every
+space's logs (which may carry what an app prints), `operate` restarts any
+service and unfollows any repo. Grant `read` or `operate` only to a service
+meant to see the whole node.
+
+The owner is the stack the space was applied under. Anyone holding the node's
+token can re-apply that stack and replace the granted service; the token
+already gives more than any grant, so this adds no power, but a node whose
+token is public (the demo) must treat the granted service as public too.
 
 A granted service with `admin` can do what the node's token can do for spaces,
 so it is given only to a service the operator trusts as much as the node. The
