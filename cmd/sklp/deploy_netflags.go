@@ -47,7 +47,28 @@ func netFlagsFromArgs(args cli.Args) *netFlags {
 		context:   args.String("context"),
 	}
 	nf.applyContextDefaults()
+	if err := nf.explicitContextErr(); err != nil {
+		fmt.Fprintln(os.Stderr, "sklp:", err)
+		os.Exit(2)
+	}
 	return nf
+}
+
+// explicitContextErr refuses a -context that names nothing: falling back to
+// the local node would answer a question about another machine, as a local
+// "not deployed".
+func (nf *netFlags) explicitContextErr() error {
+	if nf.context == "" {
+		return nil
+	}
+	cfg, _, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("deploy context %q: %w", nf.context, err)
+	}
+	if _, _, err := cfg.ResolveContext(nf.context); err != nil {
+		return fmt.Errorf("%w on this machine; connect to the node first: sklp deploy login -context %s -server <url> -token <token> -ca-fingerprint <sha256>", err, nf.context)
+	}
+	return nil
 }
 
 // applyConfigFlag makes --config take effect by exporting SKLP_CONFIG, which
@@ -193,6 +214,9 @@ func (nf *netFlags) resolveToken() (string, error) {
 func (nf *netFlags) dialClient(space string) (*control.Client, error) {
 	applyConfigFlag(nf.configFile)
 	nf.applyContextDefaults()
+	if err := nf.explicitContextErr(); err != nil {
+		return nil, err
+	}
 	if !nf.remote() {
 		return control.Dial(space)
 	}
