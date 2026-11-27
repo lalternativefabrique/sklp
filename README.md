@@ -46,6 +46,7 @@ you develop in.
 | `sklp init` | Detects your repo and your AI assistant, writes a baseline `.sklp/` and repo-tailored skills |
 | `sklp init -from compose` | Translates the root `compose.yaml` / `docker-compose.yml` (+ override) into `.sklp/<stack>/dev.yaml` and lists every manual action left, also written as `# TODO(import):` comments in the file |
 | `sklp init -from compose -to deploy` | Translates the same `compose.yaml` (+ `compose.prod.yaml`, never the dev override) into a production `.sklp/<stack>/deploy.yaml`: `${VAR}` kept as deploy-time secrets, reverse-proxy labels as gateway routes, a nightly `pg_dump` streamed to S3 for postgres |
+| `sklp init -from k8s [-path <dirs>]` | Translates Kubernetes manifests into a production `.sklp/<stack>/deploy.yaml`: the production kustomize overlays by default (rendered with `kustomize` or `kubectl`), Ingress / traefik IngressRoute / HTTPRoute as gateway routes, CloudNativePG clusters as postgres with a nightly `pg_dump`, Service addresses rewritten to the space's |
 | `sklp dev <stack>` | Supervises the local dev stack from `.sklp/<stack>/dev.yaml`: ordering, readiness, logs, one Ctrl-C to stop |
 | `${mux:<svc>}` in a dev.yaml env value | Expands to `http://<svc>.<scope>.localhost:<muxPort>`, the address the host browser reaches that service at (presigned S3 URLs, OIDC redirects, e-mail links) |
 | `sklp dev forward <stack> <svc>` | Opens one service port (postgres, nats…) on a free `127.0.0.1` port until Ctrl-C; HTTP services are reached at `<svc>.<scope>.localhost` |

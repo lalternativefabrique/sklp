@@ -55,6 +55,54 @@ func importComposeDeploy(repoAbs, stack string, force bool) (*composeImported, e
 	return &composeImported{res: res, rel: rel}, nil
 }
 
+func runK8sImport(repoAbs, stack, to, paths string, force, ascii bool) int {
+	if to != "" && to != "deploy" {
+		fmt.Fprintf(os.Stderr, "sklp init: -from k8s -to %q: Kubernetes describes production, the only target is deploy\n", to)
+		return 2
+	}
+	var sources []string
+	for _, p := range strings.Split(paths, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			sources = append(sources, p)
+		}
+	}
+	rep := reporter.New(os.Stderr, reporter.Options{ASCII: ascii})
+	rep.Header("sklp init -from k8s")
+	start := time.Now()
+	rep.StepStarted("importing manifests")
+	res, err := importer.ImportK8sDeploy(importer.K8sOptions{Root: repoAbs, Stack: stack, Sources: sources})
+	if err != nil {
+		rep.StepFinished("importing manifests", reporter.StatusFailed, time.Since(start), "")
+		fmt.Fprintf(os.Stderr, "sklp init: %v\n", err)
+		return 1
+	}
+	if res == nil {
+		rep.StepFinished("importing manifests", reporter.StatusFailed, time.Since(start), "")
+		fmt.Fprintf(os.Stderr, "sklp init: no kustomization or Kubernetes manifests under %s (pass -path)\n", repoAbs)
+		return 1
+	}
+	rel := filepath.Join(".sklp", stack, "deploy.yaml")
+	if !force && fileExists(filepath.Join(repoAbs, rel)) {
+		rel += ".draft"
+	}
+	if err := writeDraft(filepath.Join(repoAbs, rel), res.YAML, force || strings.HasSuffix(rel, ".draft")); err != nil {
+		rep.StepFinished("importing manifests", reporter.StatusFailed, time.Since(start), "")
+		fmt.Fprintf(os.Stderr, "sklp init: %v\n", err)
+		return 1
+	}
+	imp := &composeImported{res: res, rel: rel}
+	manual := importer.ManualCount(res.Notes)
+	rep.StepFinished("importing manifests", reporter.StatusPassed, time.Since(start), fmt.Sprintf("%d manual action(s)", manual))
+	next := fmt.Sprintf("sklp deploy apply %s -context <node>", stack)
+	if manual > 0 {
+		next = fmt.Sprintf("resolve TODO(import) in %s · %s", rel, next)
+	}
+	rep.Finalize("IMPORT", reporter.StatusPassed, time.Since(start), nil,
+		[]reporter.FinalField{{Label: "next", Value: next}})
+	printImportReport(os.Stderr, imp, "k8s import")
+	return 0
+}
+
 func runComposeImport(repoAbs, stack, to string, force, ascii bool) int {
 	importFn, verify := importCompose, fmt.Sprintf("sklp dev %s --validate", stack)
 	switch to {
@@ -88,17 +136,17 @@ func runComposeImport(repoAbs, stack, to string, force, ascii bool) int {
 	}
 	rep.Finalize("IMPORT", reporter.StatusPassed, time.Since(start), nil,
 		[]reporter.FinalField{{Label: "next", Value: next}})
-	printImportReport(os.Stderr, imp)
+	printImportReport(os.Stderr, imp, "compose import")
 	return 0
 }
 
-func printImportReport(w io.Writer, imp *composeImported) {
+func printImportReport(w io.Writer, imp *composeImported, title string) {
 	if imp == nil {
 		return
 	}
 	notes := imp.res.Notes
 	manual := importer.ManualCount(notes)
-	fmt.Fprintf(w, "\ncompose import: %s <- %s\n", imp.rel, strings.Join(imp.res.Sources, " + "))
+	fmt.Fprintf(w, "\n%s: %s <- %s\n", title, imp.rel, strings.Join(imp.res.Sources, " + "))
 	if manual == 0 {
 		fmt.Fprintln(w, "  no manual action left")
 	} else {

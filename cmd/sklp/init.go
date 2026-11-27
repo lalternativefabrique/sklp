@@ -50,8 +50,9 @@ func initCommand() cli.Command {
 			{Name: "agent", Type: cli.StringFlag, Usage: "skip detection and install skills for this assistant (claude|cursor|codex|vibe|zed|cline); 'none' forces the deterministic baseline"},
 			{Name: "no-run", Type: cli.BoolFlag, Usage: "install skills but do NOT hand off to the agent; just print how to run them"},
 			{Name: "ascii", Type: cli.BoolFlag, Usage: "use ASCII fallback glyphs instead of UTF-8 symbols"},
-			{Name: "from", Type: cli.StringFlag, Usage: "only import an existing setup into .sklp: 'compose' translates compose.yaml / docker-compose.yml into <stack>/dev.yaml and lists the manual actions left"},
-			{Name: "to", Type: cli.StringFlag, StringDefault: "dev", Usage: "with -from compose: 'dev' writes <stack>/dev.yaml from compose + its override; 'deploy' writes the production <stack>/deploy.yaml from compose + compose.prod.yaml"},
+			{Name: "from", Type: cli.StringFlag, Usage: "only import an existing setup into .sklp and list the manual actions left: 'compose' (compose.yaml / docker-compose.yml) or 'k8s' (Kubernetes manifests or kustomizations)"},
+			{Name: "to", Type: cli.StringFlag, Usage: "what the import writes: 'dev' (<stack>/dev.yaml, compose + its override; the compose default) or 'deploy' (the production <stack>/deploy.yaml; compose + compose.prod.yaml, and the only target of k8s)"},
+			{Name: "path", Type: cli.StringFlag, Usage: "with -from k8s: comma-separated kustomization dirs, manifest dirs or files, relative to -repo (default: the production overlays, else every top kustomization, else a k8s/ manifests dir)"},
 			{Name: "stack", Type: cli.StringFlag, StringDefault: layout.DefaultStack, Usage: "stack directory under .sklp/ the import writes to"},
 		},
 		Run: func(ctx context.Context, args cli.Args) int {
@@ -64,8 +65,10 @@ func initCommand() cli.Command {
 			case "":
 			case "compose":
 				return runComposeImport(repoAbs, args.String("stack"), args.String("to"), args.Bool("force"), args.Bool("ascii"))
+			case "k8s", "kubernetes", "kustomize":
+				return runK8sImport(repoAbs, args.String("stack"), args.String("to"), args.String("path"), args.Bool("force"), args.Bool("ascii"))
 			default:
-				fmt.Fprintf(os.Stderr, "sklp init: -from %q: only 'compose' is supported\n", from)
+				fmt.Fprintf(os.Stderr, "sklp init: -from %q: want compose or k8s\n", from)
 				return 2
 			}
 			return runInit(repoAbs, args.String("agent"), args.String("stack"),
@@ -120,7 +123,7 @@ func runInit(repoAbs, agentFlag, stack string, force, yes, noRun, ascii bool) in
 	if handOff {
 		runAgentInit(repoAbs, chosen, yes, handoffPrompt(imp), rep)
 	}
-	printImportReport(os.Stderr, imp)
+	printImportReport(os.Stderr, imp, "compose import")
 	return 0
 }
 
@@ -404,7 +407,7 @@ func writeBaseline(repoAbs, stack string, force bool, rep reporter.Reporter) err
 	for _, n := range reviewNotes {
 		rep.SubAction("review: " + n)
 	}
-	printImportReport(os.Stderr, imp)
+	printImportReport(os.Stderr, imp, "compose import")
 	return nil
 }
 

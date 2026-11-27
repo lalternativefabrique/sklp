@@ -5,7 +5,7 @@
 # import: profiles: services behind a compose profile are left out of production: adminer — add them by hand if they belong there
 # import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
 # import: spaces: routes live in space prod-production: rename it to the space this deploy should own
-# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, SESSION_SECRET (compose defaulted it; never reuse that default in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, CACHE_TTL
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, SESSION_SECRET (the source wrote a value for it; never reuse that one in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, CACHE_TTL
 version: 1
 kind: deploy
 name: prod
