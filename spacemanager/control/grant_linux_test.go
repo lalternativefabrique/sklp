@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lalternativefabrique/sklp/space"
 	"github.com/lalternativefabrique/sklp/spacemanager/grants"
 )
 
@@ -74,6 +75,7 @@ func TestGrantSocketAnswersOnlyForTheOwnerItWasGivenTo(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(xdg) })
 	t.Setenv("XDG_CONFIG_HOME", xdg)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(xdg, "c"))
 	seedManifestOwner(t, xdg, "playground", "playground/prod")
 	g := grants.Grant{Space: "playground", Service: "core", Owner: "playground/prod", Scope: grants.Read}
 	if err := grants.Put(g); err != nil {
@@ -82,18 +84,30 @@ func TestGrantSocketAnswersOnlyForTheOwnerItWasGivenTo(t *testing.T) {
 
 	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "api "+r.URL.Path) })
 	live := map[string]*grantListener{}
-	syncGrantListeners(live, api)
 	t.Cleanup(func() {
 		for _, l := range live {
 			_ = l.srv.Close()
 		}
 	})
-	sock := filepath.Join(grants.Dir("playground", "core"), grants.SocketName)
-	if st, err := os.Stat(filepath.Dir(grants.Dir("playground", "core"))); err != nil || st.Mode().Perm() != 0o700 {
-		t.Fatalf("grants parent must be private to the agent: %v %v", st, err)
+	dir, err := space.ControlSocketDir("playground", "core")
+	if err != nil {
+		t.Fatal(err)
 	}
+	sock := filepath.Join(dir, space.ControlSocketName)
+	syncGrantListeners(live, api)
+	if len(live) != 0 {
+		t.Fatal("no socket before the space exists: its state dir is the space's, never the agent's to create")
+	}
+	spaceDir := filepath.Dir(filepath.Dir(dir))
+	if err := os.MkdirAll(spaceDir, 0o710); err != nil {
+		t.Fatal(err)
+	}
+	syncGrantListeners(live, api)
 	if st, err := os.Stat(sock); err != nil || st.Mode().Perm() != 0o666 {
 		t.Fatalf("socket: %v %v", st, err)
+	}
+	if st, err := os.Stat(filepath.Dir(dir)); err != nil || st.Mode().Perm() != 0o711 {
+		t.Fatalf("control dir may be traversed, never listed: %v %v", st, err)
 	}
 	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {

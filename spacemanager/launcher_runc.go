@@ -93,7 +93,11 @@ func (l *runcLauncher) controlSocketDir(service string) string {
 	if _, ok := grants.Find(l.space, service); !ok {
 		return ""
 	}
-	return grants.Dir(l.space, service)
+	dir, err := space.ControlSocketDir(l.space, service)
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 func (l *runcLauncher) Stop(id string) { l.rt.Stop(id) }
