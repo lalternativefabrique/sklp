@@ -480,7 +480,7 @@ func TestProtocolEndToEnd(t *testing.T) {
 			t.Fatalf("%s has no description or schema", tl.Name)
 		}
 	}
-	if len(byName) != 33 {
+	if len(byName) != 32 {
 		t.Fatalf("%d tools listed", len(byName))
 	}
 	for _, name := range writeTools {
@@ -514,7 +514,7 @@ func TestReadOnlyHidesAndRefusesDestructiveTools(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 19 {
+	if len(tools.Tools) != 18 {
 		t.Fatalf("%d tools in read-only mode", len(tools.Tools))
 	}
 	for _, tl := range tools.Tools {

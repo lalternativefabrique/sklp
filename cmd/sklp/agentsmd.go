@@ -10,11 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/lalternativefabrique/sklp/internal/cli"
 	"github.com/lalternativefabrique/sklp/internal/layout"
 	"github.com/lalternativefabrique/sklp/reconcile/deployconfig/domain"
+	watchdomain "github.com/lalternativefabrique/sklp/reconcile/imageupdate/domain"
 )
 
 const (
@@ -22,13 +21,6 @@ const (
 	agentsMDEnd   = "<!-- sklp:end -->"
 	claudeImport  = "@AGENTS.md"
 )
-
-type agentsWatch struct {
-	Name      string `yaml:"name"`
-	Service   string `yaml:"service"`
-	Space     string `yaml:"space"`
-	ImageRepo string `yaml:"image_repo"`
-}
 
 func agentsMDCommand() cli.Command {
 	return cli.Command{
@@ -183,7 +175,7 @@ func readDeployRoot(repo string) (*domain.Root, error) {
 	return domain.ParseRoot(raw)
 }
 
-func readWatches(repo string) ([]agentsWatch, error) {
+func readWatches(repo string) ([]watchdomain.WatchFileEntry, error) {
 	raw, err := os.ReadFile(filepath.Join(repo, ".sklp", "image-watches.yaml"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -191,11 +183,9 @@ func readWatches(repo string) ([]agentsWatch, error) {
 	if err != nil {
 		return nil, err
 	}
-	var f struct {
-		Watches []agentsWatch `yaml:"watches"`
-	}
-	if err := yaml.Unmarshal(raw, &f); err != nil {
-		return nil, fmt.Errorf("parse image-watches.yaml: %w", err)
+	f, err := watchdomain.ParseWatchFile(raw)
+	if err != nil {
+		return nil, err
 	}
 	sort.SliceStable(f.Watches, func(i, j int) bool {
 		return f.Watches[i].Space+f.Watches[i].Service < f.Watches[j].Space+f.Watches[j].Service

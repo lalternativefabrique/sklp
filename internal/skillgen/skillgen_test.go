@@ -27,7 +27,7 @@ func TestGenerate_ProducesFullSet(t *testing.T) {
 	want := map[string]bool{
 		"dev": true, "architect": true, "ux-designer": true,
 		"init-dev": true, "init-ci": true, "init-config": true, "init-publish": true,
-		"sklp-operator": true,
+		"init-deploy": true, "init-watches": true, "sklp-operator": true,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d skills, want %d", len(got), len(want))

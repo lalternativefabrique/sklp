@@ -1,0 +1,418 @@
+{
+  "$defs": {
+    "ACMESpec": {
+      "additionalProperties": false,
+      "description": "ACMESpec is the `gateway.acme:` block, shared by both gateway drivers: the native per-space L7 (certmagic) and the traefik singleton (its own lego-based dnsChallenge).",
+      "properties": {
+        "ca": {
+          "description": "CA overrides the ACME directory URL outright (e.g. a private CA). Empty =\nLet's Encrypt production (or staging when Staging is true).",
+          "type": "string"
+        },
+        "credentials": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Credentials maps the provider's credential keys to the ENV VAR NAMES that\nhold their values (e.g. OVH_APPLICATION_KEY: OVH_APP_KEY). Resolved at load\ntime; only names live in YAML. When omitted, each credential key is read\nfrom an env var of the same name.",
+          "type": "object"
+        },
+        "dns_provider": {
+          "description": "DNSProvider names the registered dns-01 provider (e.g. \"ovh\"). Required\nwhen Enabled. Validated against the provider registry at parse time.",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "Enabled turns on ACME issuance for the native L7. Default false, so an\nexisting per-space deploy keeps serving self-signed until it opts in.",
+          "type": "boolean"
+        },
+        "propagation_seconds": {
+          "description": "PropagationSeconds waits this long for the challenge TXT record to\npropagate before asking the CA to validate. 0 = certmagic default.",
+          "type": "integer"
+        },
+        "staging": {
+          "description": "Staging selects the Let's Encrypt STAGING CA (untrusted certs, relaxed rate\nlimits) — the staging→prod promotion knob. Flip to false for real certs.",
+          "type": "boolean"
+        },
+        "storage_dir": {
+          "description": "StorageDir is refused: where certmagic writes is the node's decision\n(ACMEStorageDirEnv). Kept as a field so a manifest still naming it gets a\npointed error instead of a silently ignored key.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "BackupSpec": {
+      "additionalProperties": false,
+      "description": "BackupSpec is the YAML `backup:` block.",
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "schedule": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "GatewaySpec": {
+      "additionalProperties": false,
+      "description": "GatewaySpec is the YAML shape of the top-level `gateway:` block: which driver realises the host front door.",
+      "properties": {
+        "acme": {
+          "$ref": "#/$defs/ACMESpec",
+          "description": "ACME configures the front door (native per-space L7, or the traefik\nsingleton) to obtain real Let's Encrypt certs via the dns-01 challenge —\nthe only challenge that issues wildcards, and the only one the native L7\ncan answer behind its SNI-passthrough mux. Absent or disabled = the\nnative L7 serves per-SNI self-signed certs, and the traefik driver falls\nback to httpChallenge. Reuses Email."
+        },
+        "driver": {
+          "description": "Driver names the registered gateway driver (e.g. \"traefik\"). Empty =\nDefaultGatewayDriver. Validated against the driver registry at parse time.",
+          "type": "string"
+        },
+        "email": {
+          "description": "Email is the ACME (Let's Encrypt) contact for the traefik driver's TLS\ncertificates. REQUIRED for a real cert: Let's Encrypt rejects the\nplaceholder admin@example.com, so without this (or the\nSKLP_GATEWAY_ACME_EMAIL env override) the gateway serves a self-signed\ncert. Empty = fall back to the env var, then the placeholder.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ReadySpec": {
+      "additionalProperties": false,
+      "description": "ReadySpec is the YAML readiness probe.",
+      "properties": {
+        "drain": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "http": {
+          "type": "string"
+        },
+        "log": {
+          "type": "string"
+        },
+        "soak": {
+          "type": "string"
+        },
+        "tcp": {
+          "type": "string"
+        },
+        "timeout": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "RegistrySpec": {
+      "additionalProperties": false,
+      "description": "RegistrySpec is one registry's pull credential in a deploy.yaml `registries:` block.",
+      "properties": {
+        "password": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ResourcesSpec": {
+      "additionalProperties": false,
+      "description": "ResourcesSpec is the YAML `resources:` block of a service.",
+      "properties": {
+        "cpu": {
+          "type": "string"
+        },
+        "memory": {
+          "type": "string"
+        },
+        "pids": {
+          "type": "integer"
+        },
+        "require": {
+          "description": "Require fails the launch when a requested cap cannot be enforced (no\ncgroups v2 delegation) instead of running the service unbounded.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "RouteSpec": {
+      "additionalProperties": false,
+      "description": "RouteSpec is one public route: a service exposed at a host, optionally scoped to a path prefix.",
+      "properties": {
+        "burst": {
+          "type": "integer"
+        },
+        "compress": {
+          "description": "Compress gzips text responses (html/css/js/json/svg) above a size floor.",
+          "type": "boolean"
+        },
+        "host": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "Kind declares what the route IS, so sklp can supply a sane rate limit\nwithout the operator having to know the right numbers. It is the\nalternative to guessing from the path: a login endpoint is just as often\n/api/v2/sessions or /graphql as it is /login, so no name-matching\nheuristic can find it — but its owner always knows what it is.\nEmpty = no default (unlimited unless Rate says otherwise).",
+          "type": "string"
+        },
+        "max_body": {
+          "description": "MaxBody caps ONE request's body, in the same Ki/Mi/Gi vocabulary as\nresources.memory (\"1Mi\", \"10MB\", or a plain byte count). Empty or \"0\" =\nunbounded, and that is the default: unlike a rate limit, which only slows\na client down, a body cap is a flat refusal (413), so a value inherited\nfrom anywhere would turn a working upload into an error nobody declared.\nDeliberately NOT derived from Kind for that reason.",
+          "type": "string"
+        },
+        "passthrough": {
+          "description": "Passthrough routes the host's TLS connections by SNI to this port, never\ndecrypted by sklp: the target terminates TLS with its own certificate.",
+          "type": "integer"
+        },
+        "path": {
+          "type": "string"
+        },
+        "rate": {
+          "description": "Rate rate-limits the route per client IP: RPS sustained requests/sec,\nBurst the bucket size (max instantaneous). Both zero = unlimited. Both\nfront doors enforce it: the native L7 with a token bucket per IP, the\ntraefik driver via its rateLimit middleware (which averages over a\nperiod rather than holding a bucket, so the shape differs slightly).\nSet explicitly, they OVERRIDE whatever Kind would have supplied.",
+          "type": "number"
+        },
+        "redirect_apex": {
+          "description": "RedirectApex answers a \"www.\" request with a 301 to the same URL on the\nbare host. It is declared on the APEX route (host: example.com), not on a\nwww one: the redirect is a property of the domain, so the route that owns\nexample.com also owns where www.example.com goes.",
+          "type": "boolean"
+        },
+        "security_headers": {
+          "description": "SecurityHeaders sets the response headers a public site is expected to\ncarry: HSTS, X-Frame-Options: DENY, X-Content-Type-Options: nosniff and a\nreferrer policy. Off by default — HSTS is hard to walk back, so it is\nnever turned on behind the operator's back.",
+          "type": "boolean"
+        },
+        "service": {
+          "description": "Service is the routed target: a service of THIS space by bare name, or a\nservice on ANOTHER NODE as \"<space>/<service>\" — the gateway then dials\nthe hosting node's mesh IP (resolved live from the peer cache) and the\nremote Network Controller routes by internal host, so a public front can\nsit on one machine while the workload runs WireGuard-only on another.",
+          "type": "string"
+        },
+        "space": {
+          "description": "Space, instead of Service, hands the WHOLE host to a space on another\nnode: the gateway relays to that space's own ingress, which routes by\npath from the space's own manifest (ADR-021). Path and the per-route\noptions below are refused on such a route; they belong to the space.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Timeout bounds ONE request end to end (backend dial, response, body) as\na Go duration string (\"30s\", \"2m\"). Empty or \"0\" = unbounded, which is\nwhat a route serving large downloads, uploads or a WebSocket needs — so\nit is opt-in per route rather than a global default that would be wrong\nfor one of those. It complements the L7's own idle deadline, which closes\na SILENT connection but by design never cuts one that keeps trickling\nbytes (a slow-read client).",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ServiceOverride": {
+      "additionalProperties": false,
+      "description": "ServiceOverride is the subset of a service a space may patch.",
+      "properties": {
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "expose": {
+          "description": "Expose is the DEPRECATED alias for Port (a string port). It is normalised\ninto Port at parse time; new configs should use `port:`.",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "proxy": {
+          "type": "boolean"
+        },
+        "replicas": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ServiceSpec": {
+      "additionalProperties": false,
+      "description": "ServiceSpec is the YAML shape of one service.",
+      "properties": {
+        "backup": {
+          "$ref": "#/$defs/BackupSpec"
+        },
+        "capabilities": {
+          "description": "Capabilities the service needs BEYOND the hardened baseline, with or\nwithout the CAP_ prefix. Rarely set: the baseline already covers an\nentrypoint that chowns its data dir and drops to its own user.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "expose": {
+          "description": "Expose is the DEPRECATED alias for Port (a string port). It is normalised\ninto Port at parse time; new configs should use `port:`.",
+          "type": "string"
+        },
+        "image": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "ports": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "proxy": {
+          "type": "boolean"
+        },
+        "proxy_protocol": {
+          "description": "ProxyProtocol lists the container ports (each must appear in Ports) whose\nrelayed connections the ingress prefixes with a PROXY protocol v2 header,\nso the service sees the real client address instead of the space gateway.",
+          "items": {
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "ready": {
+          "$ref": "#/$defs/ReadySpec"
+        },
+        "replicas": {
+          "type": "integer"
+        },
+        "resources": {
+          "$ref": "#/$defs/ResourcesSpec"
+        },
+        "schedule": {
+          "description": "Schedule is the 5-field cron a `jobs:` entry re-runs on. Rejected on a\n`services:` entry, which has no terminal state to re-run from.",
+          "type": "string"
+        },
+        "volumes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "SpaceGatewaySpec": {
+      "additionalProperties": false,
+      "description": "SpaceGatewaySpec is the per-space `gateway:` block.",
+      "properties": {
+        "routes": {
+          "items": {
+            "$ref": "#/$defs/RouteSpec"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "SpaceSpec": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ServiceOverride"
+      },
+      "description": "SpaceSpec is the YAML shape of one space entry.",
+      "properties": {
+        "allow_egress": {
+          "description": "AllowEgress lists the CIDRs this space's containers may reach on the\nInternet. Absent leaves egress open (what every space did before this\nfield); a non-empty list makes outbound traffic default-deny, while\neast-west traffic on the space bridge stays untouched.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "gateway": {
+          "$ref": "#/$defs/SpaceGatewaySpec",
+          "description": "Gateway is the per-space public routing block: a list of routes mapping a\nservice to a public host (+ optional path prefix). The host is carried by\nthe ROUTE, not the service, so one service may be exposed under several\nhosts and several services may share a host on different paths. The shared\ngateway (traefik) fronts these by Host/PathPrefix, with TLS for public\nFQDNs. Mutually exclusive with Ingress per service (ingress = raw\nhost:port, no TLS; gateway = hostname routing + TLS)."
+        },
+        "ingress": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Ingress is the per-space host->space port map, keyed by service name with\na docker-style \"host:container\" value. The host port is a HOST resource the\nspace owns, so it lives here (not on the service) and two spaces may host-\nexpose the same service on different host ports without colliding (I6).",
+          "type": "object"
+        },
+        "isolate": {
+          "description": "Mould fields, only meaningful on the \"ephemeral\" entry.",
+          "type": "string"
+        },
+        "replicas": {
+          "description": "mould-wide replica override applied to every service.",
+          "type": "integer"
+        },
+        "ttl": {
+          "description": "Go duration string; the space is torn down after it.",
+          "type": "string"
+        },
+        "url": {
+          "description": "routing URL template; \"${SPACE}\" is substituted.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://raw.githubusercontent.com/lalternativefabrique/sklp/main/schema/deploy.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Schema for .sklp/<stack>/deploy.yaml, generated from spacemanager.DeployConfig. ${VAR} references are expanded before the file is decoded.",
+  "properties": {
+    "env_files": {
+      "description": "EnvFiles are dotenv paths (relative to the deploy file's dir) whose keys\nare loaded into the process environment BEFORE ${VAR} expansion, so a\ndeploy.yaml referencing ${S3_SECRET_KEY} et al. resolves without the\ncaller having to `source .env` first. Host env wins over file values. The\ndetached supervisor re-reads these same files via EnvironmentFile= in its\nsystemd unit, which is how a late-bound registry password survives the\nhand-off to systemd (see RegistryAuthMeta).",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "gateway": {
+      "$ref": "#/$defs/GatewaySpec",
+      "description": "Gateway is the optional host-level front-door config. It selects the\ngateway DRIVER (traefik by default) that `sklp gateway up` brings up to own\n:443/:80 across all spaces. Absent = the default driver."
+    },
+    "jobs": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ServiceSpec"
+      },
+      "description": "Jobs are run-once-to-completion tasks (migration, backup, one-off\nmaintenance), keyed by name and reusing the ServiceSpec shape. They are a\nSEPARATE typed family from Services (k8s Deployment vs Job): a job resolves\nto a Service with Oneshot=true. depends_on, validation and cycle detection\nspan the UNION of services+jobs; names must be unique across both maps.",
+      "type": "object"
+    },
+    "kind": {
+      "const": "deploy"
+    },
+    "name": {
+      "description": "Name labels the stack; the loader does not read it.",
+      "type": "string"
+    },
+    "project_id": {
+      "description": "ProjectID, when set, is the Skalpai core project this deploy belongs to.\nLoad fetches every secret the project owner marked\nAllowedRunners: [\"deploy\"] from GET /api/projects/:id/secrets/resolve and\nloads them into the process env the same way EnvFiles does — so\n${VAR} resolves without the operator re-entering a value already saisi in\nthe web UI. Requires `sklp auth login`; a missing/expired token makes\nthis step a soft no-op (host env / env_files / stack config still apply),\nsince a deploy must not hard-fail just because the operator forgot to log\nin and the secret is ALSO available another way.",
+      "type": "string"
+    },
+    "registries": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RegistrySpec"
+      },
+      "description": "Registries are pull credentials for private registries, keyed by registry\nhost (e.g. \"rg.fr-par.scw.cloud\"). This is the daemonless equivalent of a\nKubernetes imagePullSecret: the password is resolved from the environment\nvia ${VAR} at load time (never written in cleartext), and the runtime\nprefers these over ~/.docker/config.json at pull time. Absent = anonymous\npulls + the on-disk docker config only.",
+      "type": "object"
+    },
+    "services": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ServiceSpec"
+      },
+      "description": "Services are the base service definitions, keyed by service name. Every\nspace starts from this set and layers its overrides on top.",
+      "type": "object"
+    },
+    "spaces": {
+      "additionalProperties": {
+        "$ref": "#/$defs/SpaceSpec"
+      },
+      "description": "Spaces are the named permanent spaces (production, staging, …) plus\nthe optional \"ephemeral\" entry, which is the MOULD applied to any space\nname NOT listed here (e.g. a per-PR preview \"pr-1234\").",
+      "type": "object"
+    },
+    "version": {
+      "const": 1,
+      "description": "Version pins the deploy file format; 1 is the only value."
+    }
+  },
+  "title": "sklp deploy",
+  "type": "object"
+}

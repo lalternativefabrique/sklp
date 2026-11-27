@@ -252,13 +252,18 @@ func targetNames(targets []skillgen.Target) string {
 }
 
 func buildSkillVars(repoAbs string, facts *repofacts.RepoFacts) skillgen.Vars {
-	return skillgen.BuildVars(
+	v := skillgen.BuildVars(
 		facts,
 		projectName(repoAbs, facts),
 		pipelineContractExists(repoAbs, "ci.yaml"),
 		pipelineContractExists(repoAbs, "publish.yaml"),
 		devContractExists(repoAbs),
 	)
+	deployStacks, err := layout.New(repoAbs).StacksFor("deploy")
+	v.HasDeployConfig = err == nil && len(deployStacks) > 0
+	v.HasDeployRoot = fileExists(filepath.Join(repoAbs, ".sklp", "deploy-root.yaml"))
+	v.HasImageWatches = fileExists(filepath.Join(repoAbs, ".sklp", "image-watches.yaml"))
+	return v
 }
 
 func printSkill(w io.Writer, repoAbs, name string, target skillgen.Target) error {

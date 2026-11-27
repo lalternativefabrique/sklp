@@ -22,6 +22,9 @@ import (
 	"github.com/invopop/jsonschema"
 
 	"github.com/lalternativefabrique/sklp/pipeline/spec"
+	deploydomain "github.com/lalternativefabrique/sklp/reconcile/deployconfig/domain"
+	watchdomain "github.com/lalternativefabrique/sklp/reconcile/imageupdate/domain"
+	"github.com/lalternativefabrique/sklp/spacemanager"
 )
 
 const (
@@ -32,10 +35,17 @@ const (
 	moduleImportPath   = "github.com/lalternativefabrique/sklp"
 	pipelineImportPath = moduleImportPath + "/pipeline"
 	pipelineSubdir     = "pipeline"
+
+	schemaSubdir  = "schema"
+	schemaBaseURL = "https://raw.githubusercontent.com/lalternativefabrique/sklp/main/schema/"
 )
 
 func main() {
 	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "genschema:", err)
+		os.Exit(1)
+	}
+	if err := runContracts(); err != nil {
 		fmt.Fprintln(os.Stderr, "genschema:", err)
 		os.Exit(1)
 	}
@@ -224,4 +234,116 @@ func locatePipelineDir() (string, error) {
 		return "", fmt.Errorf("locate %s: %w", pipelineImportPath, err)
 	}
 	return pkg.Dir, nil
+}
+
+// contract is a .sklp file whose schema is reflected from the struct its
+// loader decodes into. Every object is closed (additionalProperties: false):
+// the loaders ignore an unknown key, so the schema is what tells a typo apart.
+type contract struct {
+	file, title, desc string
+	value             any
+	commentDirs       []string
+	patch             func(root, defs map[string]any)
+}
+
+var contracts = []contract{
+	{
+		file:  "deploy.schema.json",
+		title: "sklp deploy",
+		desc:  "Schema for .sklp/<stack>/deploy.yaml, generated from spacemanager.DeployConfig. ${VAR} references are expanded before the file is decoded.",
+		value: &spacemanager.DeployConfig{}, commentDirs: []string{"./spacemanager", "./ingress"},
+		patch: patchDeploy,
+	},
+	{
+		file:  "deploy-root.schema.json",
+		title: "sklp deploy-root",
+		desc:  "Schema for .sklp/deploy-root.yaml: the spaces a push to the default branch reconciles, generated from domain.Root.",
+		value: &deploydomain.Root{}, commentDirs: []string{"./reconcile/deployconfig/domain"},
+	},
+	{
+		file:  "image-watches.schema.json",
+		title: "sklp image-watches",
+		desc:  "Schema for .sklp/image-watches.yaml: the images a node rolls when the registry gains a matching tag, generated from domain.WatchFile.",
+		value: &watchdomain.WatchFile{}, commentDirs: []string{"./reconcile/imageupdate/domain"},
+	},
+}
+
+func runContracts() error {
+	pipelineDir, err := locatePipelineDir()
+	if err != nil {
+		return err
+	}
+	moduleRoot := filepath.Dir(pipelineDir)
+	for _, c := range contracts {
+		r := &jsonschema.Reflector{FieldNameTag: "yaml", ExpandedStruct: true, RequiredFromJSONSchemaTags: true}
+		prevWD, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		if err := os.Chdir(moduleRoot); err != nil {
+			return err
+		}
+		for _, dir := range c.commentDirs {
+			if err := r.AddGoComments(moduleImportPath, dir); err != nil {
+				_ = os.Chdir(prevWD)
+				return fmt.Errorf("%s: add go comments: %w", c.file, err)
+			}
+		}
+		_ = os.Chdir(prevWD)
+
+		s := r.Reflect(c.value)
+		s.ID = jsonschema.ID(schemaBaseURL + c.file)
+		s.Version = "https://json-schema.org/draft/2020-12/schema"
+		s.Title = c.title
+		s.Description = c.desc
+		raw, err := json.Marshal(s)
+		if err != nil {
+			return err
+		}
+		var generic map[string]any
+		if err := json.Unmarshal(raw, &generic); err != nil {
+			return err
+		}
+		defs, _ := generic["$defs"].(map[string]any)
+		if c.patch != nil {
+			c.patch(generic, defs)
+		}
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetIndent("", "  ")
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(generic); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(moduleRoot, schemaSubdir, c.file), buf.Bytes(), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// patchDeploy reshapes SpaceSpec, whose UnmarshalYAML reads the mould keys and
+// treats every other key as a per-service override.
+func patchDeploy(root, defs map[string]any) {
+	props, _ := root["properties"].(map[string]any)
+	props["version"] = map[string]any{"const": 1, "description": "Version pins the deploy file format; 1 is the only value."}
+	props["kind"] = map[string]any{"const": "deploy"}
+	props["name"] = map[string]any{"type": "string", "description": "Name labels the stack; the loader does not read it."}
+	sp, ok := defs["SpaceSpec"].(map[string]any)
+	if !ok {
+		return
+	}
+	spProps, _ := sp["properties"].(map[string]any)
+	delete(spProps, "Overrides")
+	for goName, key := range map[string]string{
+		"Ingress": "ingress", "Gateway": "gateway", "AllowEgress": "allow_egress",
+		"Isolate": "isolate", "URL": "url", "TTL": "ttl", "Replicas": "replicas",
+	} {
+		if v, ok := spProps[goName]; ok {
+			delete(spProps, goName)
+			spProps[key] = v
+		}
+	}
+	delete(sp, "required")
+	sp["additionalProperties"] = map[string]any{"$ref": "#/$defs/ServiceOverride"}
 }
