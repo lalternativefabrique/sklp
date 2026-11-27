@@ -39,16 +39,25 @@ func CIConfig(f *RepoFacts) (yaml string, notes []string) {
 		globs []string
 		steps []string // rendered step blocks
 	}
-	var mods []modStep
+	byPath := map[string][]langModule{}
 	for _, lang := range f.Languages {
 		for _, m := range lang.Modules {
-			scope := scopeName(m.Path, lang.Lang)
-			globs := scopeGlobs(m.Path)
-			steps := ciSteps(lang, m, scope)
-			if len(steps) == 0 {
-				continue
+			byPath[modulePath(m.Path)] = append(byPath[modulePath(m.Path)], langModule{lang, m})
+		}
+	}
+	scopes := uniqueScopeNames(byPath)
+	var mods []modStep
+	for path, lms := range byPath {
+		ms := modStep{scope: scopes[path], globs: scopeGlobs(path)}
+		for _, lm := range lms {
+			name := "test-" + ms.scope
+			if len(lms) > 1 {
+				name += "-" + lm.lang.Lang
 			}
-			mods = append(mods, modStep{scope: scope, globs: globs, steps: steps})
+			ms.steps = append(ms.steps, ciSteps(lm.lang, lm.mod, ms.scope, name)...)
+		}
+		if len(ms.steps) > 0 {
+			mods = append(mods, ms)
 		}
 	}
 	// Stable order by scope name so output is reproducible.
@@ -98,13 +107,13 @@ func ciToolchain(f *RepoFacts) map[string]string {
 
 // ciSteps returns the rendered step block(s) for one module. Each block
 // is a full YAML fragment ready to append under `steps:`.
-func ciSteps(lang LanguageFacts, m ModuleFacts, scope string) []string {
+func ciSteps(lang LanguageFacts, m ModuleFacts, scope, name string) []string {
 	dir := m.Path
 	if dir == "" {
 		dir = "."
 	}
 	var steps []string
-	add := func(name string, tools []string, run string) {
+	add := func(tools []string, run string) {
 		var b strings.Builder
 		fmt.Fprintf(&b, "  - name: %s\n", name)
 		fmt.Fprintf(&b, "    scope: [%s]\n", scope)
@@ -117,18 +126,18 @@ func ciSteps(lang LanguageFacts, m ModuleFacts, scope string) []string {
 
 	switch lang.Lang {
 	case "go":
-		add("test-"+scope, []string{"go"}, fmt.Sprintf("cd %s && go test ./...", dir))
+		add([]string{"go"}, fmt.Sprintf("cd %s && go test ./...", dir))
 	case "node":
 		pm := lang.PackageManager
 		if pm == "" {
 			pm = "npm"
 		}
 		run := nodeScript(pm, dir, "test")
-		add("test-"+scope, dedupeTools([]string{"node", pm}), run)
+		add(dedupeTools([]string{"node", pm}), run)
 	case "rust":
-		add("test-"+scope, []string{"rust"}, fmt.Sprintf("cd %s && cargo test", dir))
+		add([]string{"rust"}, fmt.Sprintf("cd %s && cargo test", dir))
 	case "python":
-		add("test-"+scope, []string{"python"}, fmt.Sprintf("cd %s && python -m pytest", dir))
+		add([]string{"python"}, fmt.Sprintf("cd %s && python -m pytest", dir))
 	default:
 		// Unknown language: no deterministic command we'd trust.
 	}
@@ -165,15 +174,41 @@ func dedupeTools(in []string) []string {
 
 // scopeName derives a stable scope identifier from a module path.
 // "services/api" → "api", "" → the language name.
-func scopeName(path, lang string) string {
-	if path == "" || path == "." {
-		return lang
+type langModule struct {
+	lang LanguageFacts
+	mod  ModuleFacts
+}
+
+func modulePath(path string) string {
+	if path == "" {
+		return "."
 	}
-	base := path
-	if i := strings.LastIndex(path, "/"); i >= 0 {
-		base = path[i+1:]
+	return path
+}
+
+// uniqueScopeNames names each module path's scope after its last element, or
+// after the whole path when that element is shared: a scopes: map with a
+// repeated key is not valid YAML.
+func uniqueScopeNames(byPath map[string][]langModule) map[string]string {
+	base := func(path string) string {
+		if path == "." {
+			return byPath[path][0].lang.Lang
+		}
+		return path[strings.LastIndex(path, "/")+1:]
 	}
-	return base
+	count := map[string]int{}
+	for path := range byPath {
+		count[base(path)]++
+	}
+	names := make(map[string]string, len(byPath))
+	for path := range byPath {
+		if name := base(path); count[name] == 1 {
+			names[path] = name
+		} else {
+			names[path] = strings.ReplaceAll(path, "/", "-")
+		}
+	}
+	return names
 }
 
 // scopeGlobs returns the doublestar globs that define a module's scope.

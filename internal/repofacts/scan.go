@@ -197,6 +197,8 @@ func isIgnoredDir(name string) bool {
 		return true
 	case "coverage", ".coverage":
 		return true
+	case "tmp":
+		return true
 	case ".cache":
 		return true
 	}
