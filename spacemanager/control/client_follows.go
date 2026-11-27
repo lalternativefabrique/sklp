@@ -103,3 +103,11 @@ func (c *Client) Watches(ctx context.Context) (WatchesResponse, error) {
 	}
 	return out, nil
 }
+
+func (c *Client) Manifest(ctx context.Context) (ManifestResponse, error) {
+	var out ManifestResponse
+	if err := c.getJSON(ctx, c.route(RouteManifest), &out); err != nil {
+		return ManifestResponse{}, err
+	}
+	return out, nil
+}
