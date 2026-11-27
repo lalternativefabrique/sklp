@@ -1,0 +1,45 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 0 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # import: resources: no limit was set: the request is used as the limit
+  # import: ready: no healthcheck: a TCP probe on port 80 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  frontend:
+    image: us-docker.pkg.dev/google-samples/containers/gke/gb-frontend:v5
+    replicas: 3
+    port: 80
+    env:
+      GET_HOSTS_FROM: dns
+    resources:
+      cpu: 100m
+      memory: 100Mi
+    ready:
+      tcp: localhost:80
+      timeout: 60s
+
+  # import: resources: no limit was set: the request is used as the limit
+  # import: ready: no healthcheck: a TCP probe on port 6379 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  redis-follower:
+    image: us-docker.pkg.dev/google-samples/containers/gke/gb-redis-follower:v2
+    replicas: 2
+    port: 6379
+    resources:
+      cpu: 100m
+      memory: 100Mi
+    ready:
+      tcp: localhost:6379
+      timeout: 60s
+
+  # import: resources: no limit was set: the request is used as the limit
+  redis-leader:
+    image: registry.k8s.io/redis@sha256:cb111d1bd870a6a471385a4a69ad17469d326e9dd91e0e455350cacf36e1b3ee
+    port: 6379
+    resources:
+      cpu: 100m
+      memory: 100Mi
+    ready:
+      log: Ready to accept connections
+      timeout: 120s

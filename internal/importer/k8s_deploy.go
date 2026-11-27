@@ -21,13 +21,14 @@ type K8sOptions struct {
 // no Sources it looks for them under Root, and returns nil when none exist.
 func ImportK8sDeploy(opts K8sOptions) (*ComposeImport, error) {
 	sources := opts.Sources
+	discovered := false
 	if len(sources) == 0 {
-		sources = FindK8sSources(opts.Root)
+		sources, discovered = FindK8sSources(opts.Root), true
 	}
 	if len(sources) == 0 {
 		return nil, nil
 	}
-	objs, err := loadK8s(opts.Root, sources)
+	objs, dups, err := loadK8s(opts.Root, sources)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +39,12 @@ func ImportK8sDeploy(opts K8sOptions) (*ComposeImport, error) {
 	k := &k8sTranslator{
 		st:   &deployStack{origin: "k8s", name: opts.Stack, space: project + "-production", project: project, vars: map[string]*deployVar{}},
 		objs: objs,
+	}
+	if discovered && len(sources) > 1 && !namesProduction(strings.Join(sources, "/")) {
+		k.st.stackNote(Manual, "sources", "several deployable roots were found and merged (%s): if they are alternatives rather than parts of one app, import again with -path naming the one that runs in production", strings.Join(sources, ", "))
+	}
+	if dups > 0 {
+		k.st.stackNote(Info, "sources", "%d object(s) rendered by more than one source were imported once", dups)
 	}
 	k.translate()
 	return &ComposeImport{Sources: sources, YAML: renderDeploy(k.st, sources), Notes: k.st.allNotes()}, nil
@@ -87,7 +94,7 @@ func (k *k8sTranslator) translate() {
 	for _, o := range k.objs {
 		if o.group() == "postgresql.cnpg.io" && o.kind == "Cluster" {
 			k.consumed[o.ref()] = true
-			k.st.services = append(k.st.services, k.cnpgCluster(o))
+			k.add(k.cnpgCluster(o))
 		}
 	}
 	for _, o := range k.objs {
@@ -132,6 +139,17 @@ func (k *k8sTranslator) translate() {
 	k.registries()
 	k.leftovers()
 	k.st.finish()
+}
+
+func (k *k8sTranslator) add(s *deployService) {
+	if k.st.find(s.name) != nil {
+		base := s.name
+		for i := 2; k.st.find(s.name) != nil; i++ {
+			s.name = fmt.Sprintf("%s-%d", base, i)
+		}
+		s.note(Manual, "", "another workload is already named %s: this one is imported as %s — rename one of them and the addresses that reach it", base, s.name)
+	}
+	k.st.services = append(k.st.services, s)
 }
 
 func (k *k8sTranslator) index() {
@@ -196,7 +214,7 @@ func sortedKeysOf(m map[string]string) []string {
 	return keys
 }
 
-func (k *k8sTranslator) selectingService(ns string, labels map[string]any) *k8sService {
+func (k *k8sTranslator) selectingServices(ns string, labels map[string]any) []*k8sService {
 	var found []*k8sService
 	for _, ks := range k.services {
 		if ks.obj.namespace != ns {
@@ -217,16 +235,28 @@ func (k *k8sTranslator) selectingService(ns string, labels map[string]any) *k8sS
 			found = append(found, ks)
 		}
 	}
-	if len(found) == 0 {
-		return nil
-	}
-	sort.Slice(found, func(i, j int) bool { return found[i].obj.name < found[j].obj.name })
+	var free []*k8sService
 	for _, ks := range found {
 		if !ks.selected {
-			return ks
+			free = append(free, ks)
 		}
 	}
-	return nil
+	sort.Slice(free, func(i, j int) bool {
+		a, b := free[i], free[j]
+		if ea, eb := exposedType(a), exposedType(b); ea != eb {
+			return !ea
+		}
+		if len(a.obj.name) != len(b.obj.name) {
+			return len(a.obj.name) < len(b.obj.name)
+		}
+		return a.obj.name < b.obj.name
+	})
+	return free
+}
+
+func exposedType(ks *k8sService) bool {
+	t := str(ks.obj.spec()["type"])
+	return t == "LoadBalancer" || t == "NodePort"
 }
 
 func (k *k8sTranslator) workload(o k8sObject, template map[string]any, job bool, schedule string) {
@@ -238,13 +268,15 @@ func (k *k8sTranslator) workload(o k8sObject, template map[string]any, job bool,
 		return
 	}
 	name := o.name
-	ks := (*k8sService)(nil)
+	var fronts []*k8sService
 	if !job {
-		ks = k.selectingService(o.namespace, labels)
+		fronts = k.selectingServices(o.namespace, labels)
 	}
-	if ks != nil {
+	for _, ks := range fronts {
 		ks.selected = true
-		name = ks.obj.name
+	}
+	if len(fronts) > 0 {
+		name = fronts[0].obj.name
 	}
 	volumes := map[string]map[string]any{}
 	for _, v := range anyList(podSpec["volumes"]) {
@@ -275,7 +307,7 @@ func (k *k8sTranslator) workload(o k8sObject, template map[string]any, job bool,
 		}
 		in := k.container(o, name+"-"+str(c["name"]), c, podSpec, volumes, true)
 		in.note(Info, "jobs", "was an init container of %s: it now runs once as a job %s waits for", o.ref(), name)
-		k.st.services = append(k.st.services, in)
+		k.add(in)
 		inits = append(inits, in.name)
 	}
 
@@ -283,17 +315,20 @@ func (k *k8sTranslator) workload(o k8sObject, template map[string]any, job bool,
 	main.schedule = schedule
 	main.dependsOn = append(main.dependsOn, inits...)
 	main.waitsFor = waited
-	if ks != nil {
+	for i, ks := range fronts {
 		k.servicePorts(ks, main, asMap(containers[0]))
+		if i > 0 {
+			main.note(Info, "port", "Service %s also fronted it: its address is rewritten to %s", ks.obj.name, main.name)
+		}
 	}
 	k.workloadFields(o, main, podSpec, job)
-	k.st.services = append(k.st.services, main)
+	k.add(main)
 
 	for _, extra := range containers[1:] {
 		c := asMap(extra)
 		side := k.container(o, name+"-"+str(c["name"]), c, podSpec, volumes, job)
 		side.note(Manual, "", "was a container of the %s pod, sharing localhost with %s: inside the space it is a separate service — replace localhost:<port> between them with <service>:<port>, and give it the volumes they shared", o.ref(), name)
-		k.st.services = append(k.st.services, side)
+		k.add(side)
 	}
 }
 
@@ -700,7 +735,7 @@ func (k *k8sTranslator) mounts(s *deployService, c map[string]any, volumes map[s
 		case v == nil:
 			s.note(Manual, "volumes", "volume %s mounted on %s is not declared in the pod", name, dst)
 		case v["volumeClaimTemplate"] == true:
-			vol := s.name + "-" + name
+			vol := volumeName(s.name, name)
 			s.volumes = append(s.volumes, vol+":"+dst+suffix)
 			s.note(Info, "volumes", "volumeClaimTemplate %s is the named volume %s; the PVC data is not copied", name, vol)
 		case v["persistentVolumeClaim"] != nil:
@@ -708,18 +743,40 @@ func (k *k8sTranslator) mounts(s *deployService, c map[string]any, volumes map[s
 			s.volumes = append(s.volumes, claim+":"+dst+suffix)
 			s.note(Info, "volumes", "PVC %s is the named volume %s; its data is not copied — restore it before the first start", claim, claim)
 		case v["emptyDir"] != nil:
-			vol := s.name + "-" + name
+			vol := volumeName(s.name, name)
 			s.volumes = append(s.volumes, vol+":"+dst+suffix)
 			s.scratch = append(s.scratch, vol)
 			s.note(Info, "volumes", "emptyDir %s is the named volume %s: unlike the emptyDir it survives a restart", name, vol)
 		case v["configMap"] != nil || v["secret"] != nil || v["projected"] != nil:
 			s.note(Manual, "volumes", "%s mounts files from a ConfigMap/Secret on %s: bake the files into the image (`COPY`) or pass the values through env", name, dst)
+		case diskSource(v) != "":
+			vol := volumeName(s.name, name)
+			s.volumes = append(s.volumes, vol+":"+dst+suffix)
+			s.note(Info, "volumes", "%s disk %s is the named volume %s; its data is not copied — restore it before the first start", diskSource(v), name, vol)
 		case v["hostPath"] != nil:
 			s.note(Manual, "volumes", "hostPath %s on %s: a space only mounts named volumes", str(asMap(v["hostPath"])["path"]), dst)
 		default:
 			s.note(Manual, "volumes", "volume %s on %s has a source with no deploy.yaml equivalent", name, dst)
 		}
 	}
+}
+
+func volumeName(service, volume string) string {
+	if volume == service || strings.HasPrefix(volume, service+"-") {
+		return volume
+	}
+	return service + "-" + volume
+}
+
+var diskSources = []string{"gcePersistentDisk", "awsElasticBlockStore", "azureDisk", "azureFile", "csi", "nfs", "iscsi", "cephfs", "rbd", "cinder", "glusterfs", "portworxVolume", "ephemeral"}
+
+func diskSource(v map[string]any) string {
+	for _, k := range diskSources {
+		if v[k] != nil {
+			return k
+		}
+	}
+	return ""
 }
 
 func (k *k8sTranslator) servicePorts(ks *k8sService, s *deployService, c map[string]any) {
@@ -744,7 +801,7 @@ func (k *k8sTranslator) servicePorts(ks *k8sService, s *deployService, c map[str
 			if np := atoi(str(pm["nodePort"])); np > 0 && str(ks.obj.spec()["type"]) == "NodePort" {
 				pub = np
 			}
-			if tcpOnlyPorts[target] || strings.EqualFold(str(pm["protocol"]), "UDP") || !httpLike(pm, target) {
+			if tcpOnlyPorts[target] || strings.EqualFold(str(pm["protocol"]), "UDP") || !httpLike(pm, port, target) {
 				proto := ""
 				if strings.EqualFold(str(pm["protocol"]), "UDP") {
 					proto = "/udp"
@@ -759,9 +816,9 @@ func (k *k8sTranslator) servicePorts(ks *k8sService, s *deployService, c map[str
 	}
 }
 
-func httpLike(pm map[string]any, target int) bool {
+func httpLike(pm map[string]any, port, target int) bool {
 	name := strings.ToLower(str(pm["name"]))
-	return strings.Contains(name, "http") || strings.Contains(name, "web") || target == 80 || target == 443 || target == 8080 || target == 3000
+	return strings.Contains(name, "http") || strings.Contains(name, "web") || port == 80 || port == 443 || target == 80 || target == 443 || target == 8080 || target == 3000
 }
 
 func (k *k8sTranslator) exposedServices() {
@@ -1139,20 +1196,20 @@ func (k *k8sTranslator) inferDependencies() {
 			if other == s || other.job {
 				continue
 			}
-			values := append([]string(nil), s.command...)
-			for _, v := range s.env {
-				values = append(values, v)
+			hit := false
+			for _, a := range s.command {
+				hit = hit || refersTo("", a, other.name)
 			}
-			for _, v := range values {
-				if refersTo(v, other.name) {
-					deps = append(deps, other.name)
-					break
+			for key, v := range s.env {
+				hit = hit || refersTo(key, v, other.name)
+			}
+			if hit {
+				if k.reaches(other, s.name) {
+					s.note(Manual, "depends_on", "it calls %s, which also calls it back: no depends_on is set between them, start order is left to their retries", other.name)
+					continue
 				}
-			}
-		}
-		for _, d := range deps {
-			if !containsString(s.dependsOn, d) {
-				s.dependsOn = append(s.dependsOn, d)
+				deps = append(deps, other.name)
+				s.dependsOn = append(s.dependsOn, other.name)
 			}
 		}
 		if len(deps) > 0 {
@@ -1161,13 +1218,38 @@ func (k *k8sTranslator) inferDependencies() {
 	}
 }
 
-func refersTo(v, name string) bool {
+func (k *k8sTranslator) reaches(from *deployService, target string) bool {
+	seen := map[string]bool{}
+	var walk func(s *deployService) bool
+	walk = func(s *deployService) bool {
+		if s == nil || seen[s.name] {
+			return false
+		}
+		seen[s.name] = true
+		for _, d := range s.dependsOn {
+			if d == target || walk(k.st.find(d)) {
+				return true
+			}
+		}
+		return false
+	}
+	return from.name == target || walk(from)
+}
+
+var hostKeyRE = regexp.MustCompile(`(?i)(HOST|HOSTNAME|ADDR|ADDRESS|SERVER|SERVERS|URL|URI|ENDPOINT|DSN)S?$`)
+
+// refersTo reports whether a value addresses the service: a URL or
+// host:port naming it, or the bare name in a variable that holds a host.
+func refersTo(key, v, name string) bool {
 	for _, sep := range []string{"//", "@"} {
 		if strings.Contains(v, sep+name+":") || strings.Contains(v, sep+name+"/") || strings.HasSuffix(v, sep+name) {
 			return true
 		}
 	}
-	return v == name || strings.HasPrefix(v, name+":")
+	if strings.HasPrefix(v, name+":") && atoi(strings.TrimPrefix(v, name+":")) > 0 {
+		return true
+	}
+	return v == name && hostKeyRE.MatchString(key)
 }
 
 func containsString(list []string, v string) bool {

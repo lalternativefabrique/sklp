@@ -1,0 +1,36 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 3 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: ConfigMap the-map dropped: values were inlined where services read them
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space kustomize-helloworld-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). settings — `sklp config set -s prod NAME value`: ACME_EMAIL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # TODO(import): command: Kubernetes command: replaced the image ENTRYPOINT; deploy.yaml's command: is appended to the ENTRYPOINT instead — it is kept as command+args, which only works when the image has no ENTRYPOINT
+  # import: port: Service the-service listened on 8666 and forwarded to 8080: inside the space it is reached at the-service:8080, and the addresses in env were rewritten
+  # TODO(import): routes: the LoadBalancer Service exposed HTTP port 8666: it becomes a gateway route — set its public hostname under spaces:
+  # import: ready: no healthcheck: a TCP probe on port 8080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  the-service:
+    image: monopole/hello:1
+    command: [/hello, --port=8080, --enableRiskyFeature=false]
+    replicas: 3
+    port: 8080
+    env:
+      ALT_GREETING: Good Morning!
+      ENABLE_RISKY: "false"
+    ready:
+      tcp: localhost:8080
+      timeout: 60s
+
+spaces:
+  kustomize-helloworld-production:
+    gateway:
+      routes:
+        - service: the-service
+          host: the-service.example.com

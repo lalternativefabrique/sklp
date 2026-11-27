@@ -1,0 +1,65 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 4 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: Secret demo-mysql-pass dropped: values are never copied: each one is a ${VAR} to set
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space kustomize-wordpress-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, MYSQL_ROOT_PASSWORD (the source wrote a value for it; never reuse that one in production), WORDPRESS_DB_PASSWORD (the source wrote a value for it; never reuse that one in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, BACKUP_S3_REGION, BACKUP_S3_URL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # import: volumes: emptyDir mysql-persistent-storage is the named volume demo-mysql-mysql-persistent-storage: unlike the emptyDir it survives a restart
+  # import: backup: a nightly dump of every database is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none
+  demo-mysql:
+    image: mysql:5.6
+    port: 3306
+    env:
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      SKLP_BACKUP_TO: ${BACKUP_S3_URL}
+    volumes:
+      - demo-mysql-mysql-persistent-storage:/var/lib/mysql
+    ready:
+      log: ready for connections
+      timeout: 120s
+    backup:
+      schedule: 0 3 * * *
+      command: [sh, -c, exec "$(command -v mariadb-dump || command -v mysqldump)" --single-transaction --all-databases -uroot -p"$MYSQL_ROOT_PASSWORD"]
+
+  # import: volumes: emptyDir wordpress-persistent-storage is the named volume demo-wordpress-wordpress-persistent-storage: unlike the emptyDir it survives a restart
+  # TODO(import): routes: the LoadBalancer Service exposed HTTP port 80: it becomes a gateway route — set its public hostname under spaces:
+  # import: depends_on: inferred from the addresses it calls: demo-mysql
+  # import: ready: no healthcheck: a TCP probe on port 80 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  demo-wordpress:
+    image: wordpress:4.8-apache
+    port: 80
+    env:
+      WORDPRESS_DB_HOST: demo-mysql
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
+    volumes:
+      - demo-wordpress-wordpress-persistent-storage:/var/www/html
+    depends_on: [demo-wordpress-init-command, demo-mysql]
+    ready:
+      tcp: localhost:80
+      timeout: 60s
+
+jobs:
+  # TODO(import): image: debian is not pinned: production must name an exact version (a rollout only changes what the file says)
+  # TODO(import): command: Kubernetes command: replaced the image ENTRYPOINT; deploy.yaml's command: is appended to the ENTRYPOINT instead — it is kept as command+args, which only works when the image has no ENTRYPOINT
+  # import: jobs: was an init container of Deployment/demo-wordpress: it now runs once as a job demo-wordpress waits for
+  demo-wordpress-init-command:
+    image: debian
+    command: [/bin/sh, -c, echo demo-wordpress; echo demo-mysql]
+
+spaces:
+  kustomize-wordpress-production:
+    gateway:
+      routes:
+        - service: demo-wordpress
+          host: demo-wordpress.example.com

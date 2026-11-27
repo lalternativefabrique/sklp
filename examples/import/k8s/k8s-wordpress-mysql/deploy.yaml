@@ -1,0 +1,62 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 3 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: PersistentVolumeClaim mysql-pv-claim, wp-pv-claim dropped: claims became named volumes
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space k8s-wordpress-mysql-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, WORDPRESS_DB_PASSWORD; settings — `sklp config set -s prod NAME value`: ACME_EMAIL, BACKUP_S3_REGION, BACKUP_S3_URL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # import: volumes: PVC wp-pv-claim is the named volume wp-pv-claim; its data is not copied — restore it before the first start
+  # TODO(import): routes: the LoadBalancer Service exposed HTTP port 80: it becomes a gateway route — set its public hostname under spaces:
+  # import: depends_on: inferred from the addresses it calls: wordpress-mysql
+  # import: ready: no healthcheck: a TCP probe on port 80 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  # TODO(import): backup: volume(s) wp-pv-claim hold this service's data and nothing backs them up: add a backup: block (a command writing an archive to stdout + a cron schedule) and SKLP_BACKUP_TO in env
+  wordpress:
+    image: wordpress:6.2.1-apache
+    port: 80
+    env:
+      WORDPRESS_DB_HOST: wordpress-mysql
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
+      WORDPRESS_DB_USER: wordpress
+    volumes:
+      - wp-pv-claim:/var/www/html
+    depends_on: [wordpress-mysql]
+    ready:
+      tcp: localhost:80
+      timeout: 60s
+
+  # import: volumes: PVC mysql-pv-claim is the named volume mysql-pv-claim; its data is not copied — restore it before the first start
+  # import: backup: a nightly dump of every database is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none
+  wordpress-mysql:
+    image: mysql:8.0
+    port: 3306
+    env:
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      MYSQL_DATABASE: wordpress
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: wordpress
+      SKLP_BACKUP_TO: ${BACKUP_S3_URL}
+    volumes:
+      - mysql-pv-claim:/var/lib/mysql
+    ready:
+      log: ready for connections
+      timeout: 120s
+    backup:
+      schedule: 0 3 * * *
+      command: [sh, -c, exec "$(command -v mariadb-dump || command -v mysqldump)" --single-transaction --all-databases -uroot -p"$MYSQL_ROOT_PASSWORD"]
+
+spaces:
+  k8s-wordpress-mysql-production:
+    gateway:
+      routes:
+        - service: wordpress
+          host: wordpress.example.com

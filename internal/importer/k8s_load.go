@@ -43,6 +43,8 @@ func kustomizationFile(dir string) string {
 	return ""
 }
 
+var nonDeployDirs = map[string]bool{"node_modules": true, "vendor": true, "test": true, "tests": true, "e2e": true, "testdata": true, "examples": true, "example": true, "samples": true, "docs": true, "hack": true}
+
 var k8sDirNames = map[string]bool{"k8s": true, "kube": true, "kubernetes": true, "manifests": true, "deploy": true, "deployment": true}
 
 // FindK8sSources picks what an operator would `kubectl apply -k` in
@@ -56,10 +58,10 @@ func FindK8sSources(root string) []string {
 			return nil
 		}
 		rel, _ := filepath.Rel(root, p)
-		if rel != "." && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" || d.Name() == "vendor" || strings.Count(rel, string(filepath.Separator)) > 5) {
+		if rel != "." && (strings.HasPrefix(d.Name(), ".") || nonDeployDirs[strings.ToLower(d.Name())] || strings.Count(rel, string(filepath.Separator)) > 5) {
 			return filepath.SkipDir
 		}
-		if kustomizationFile(p) != "" {
+		if kf := kustomizationFile(p); kf != "" && !isKustomizeComponent(kf) {
 			dirs = append(dirs, p)
 		}
 		return nil
@@ -103,6 +105,18 @@ func FindK8sSources(root string) []string {
 		return nil
 	})
 	return found
+}
+
+func isKustomizeComponent(file string) bool {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return false
+	}
+	var k struct {
+		Kind string `yaml:"kind"`
+	}
+	_ = yaml.Unmarshal(data, &k)
+	return k.Kind == "Component"
 }
 
 func namesProduction(rel string) bool {
@@ -153,8 +167,9 @@ func isYAML(name string) bool {
 
 // loadK8s renders each source (a kustomization directory, a manifests
 // directory or a single file) into its Kubernetes objects.
-func loadK8s(root string, sources []string) ([]k8sObject, error) {
+func loadK8s(root string, sources []string) ([]k8sObject, int, error) {
 	var objs []k8sObject
+	seen, dups := map[string]bool{}, 0
 	for _, src := range sources {
 		abs := src
 		if !filepath.IsAbs(abs) {
@@ -164,7 +179,7 @@ func loadK8s(root string, sources []string) ([]k8sObject, error) {
 		info, err := os.Stat(abs)
 		switch {
 		case err != nil:
-			return nil, err
+			return nil, 0, err
 		case info.IsDir() && kustomizationFile(abs) != "":
 			docs, err = kustomizeBuild(abs)
 		case info.IsDir():
@@ -173,15 +188,23 @@ func loadK8s(root string, sources []string) ([]k8sObject, error) {
 			docs, err = os.ReadFile(abs)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", src, err)
+			return nil, 0, fmt.Errorf("%s: %w", src, err)
 		}
 		parsed, err := parseK8sDocs(docs)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", src, err)
+			return nil, 0, fmt.Errorf("%s: %w", src, err)
 		}
-		objs = append(objs, parsed...)
+		for _, o := range parsed {
+			id := o.group() + "/" + o.kind + "/" + o.namespace + "/" + o.name
+			if seen[id] {
+				dups++
+				continue
+			}
+			seen[id] = true
+			objs = append(objs, o)
+		}
 	}
-	return objs, nil
+	return objs, dups, nil
 }
 
 // ErrNoKustomize is returned when a kustomization must be rendered and

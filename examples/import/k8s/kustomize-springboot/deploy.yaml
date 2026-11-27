@@ -1,0 +1,35 @@
+# Imported for production from source/overlays/production by `sklp init -from k8s -to deploy`.
+# 5 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: ConfigMap production-demo-configmap-6d62b7m2kc dropped: values were inlined where services read them
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space kustomize-springboot-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). settings — `sklp config set -s prod NAME value`: ACME_EMAIL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # TODO(import): image: jingfang/sbdemo is not pinned: production must name an exact version (a rollout only changes what the file says)
+  # TODO(import): env: MEM_TOTAL_MB read a resource limit from the pod: write the value
+  # import: ready: taken from the readinessProbe
+  # TODO(import): volumes: demo-config mounts files from a ConfigMap/Secret on /config: bake the files into the image (`COPY`) or pass the values through env
+  # TODO(import): routes: the LoadBalancer Service exposed HTTP port 8080: it becomes a gateway route — set its public hostname under spaces:
+  production-sbdemo:
+    image: jingfang/sbdemo
+    replicas: 2
+    port: 8080
+    resources:
+      memory: 1250Mi
+    ready:
+      http: http://localhost:8080/actuator/info
+      timeout: 50s
+
+spaces:
+  kustomize-springboot-production:
+    gateway:
+      routes:
+        - service: production-sbdemo
+          host: production-sbdemo.example.com

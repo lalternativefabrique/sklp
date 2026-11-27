@@ -1,0 +1,9 @@
+# Imported for production from source/production by `sklp init -from k8s -to deploy`.
+# 0 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+version: 1
+kind: deploy
+name: prod
+
+services:
+  prod-myapp-pod:
+    image: nginx:1.7.9

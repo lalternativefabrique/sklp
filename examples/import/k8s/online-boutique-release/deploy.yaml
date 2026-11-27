@@ -1,0 +1,235 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 3 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: ServiceAccount adservice, cartservice, checkoutservice, currencyservice, emailservice, frontend, loadgenerator, paymentservice, productcatalogservice, recommendationservice, shippingservice dropped: no Kubernetes API in a space
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space online-boutique-release-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). settings — `sklp config set -s prod NAME value`: ACME_EMAIL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # import: ready: the gRPC readinessProbe became a TCP probe on 9555
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  adservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/adservice:v0.10.7
+    port: 9555
+    env:
+      PORT: "9555"
+    resources:
+      cpu: 300m
+      memory: 300Mi
+    ready:
+      tcp: localhost:9555
+      timeout: 65s
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 7070
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: depends_on: inferred from the addresses it calls: redis-cart
+  cartservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/cartservice:v0.10.7
+    port: 7070
+    env:
+      REDIS_ADDR: redis-cart:6379
+    depends_on: [redis-cart]
+    resources:
+      cpu: 300m
+      memory: 128Mi
+    ready:
+      tcp: localhost:7070
+      timeout: 45s
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 5050
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: depends_on: inferred from the addresses it calls: cartservice, currencyservice, emailservice, paymentservice, productcatalogservice, shippingservice
+  checkoutservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/checkoutservice:v0.10.7
+    port: 5050
+    env:
+      CART_SERVICE_ADDR: cartservice:7070
+      CURRENCY_SERVICE_ADDR: currencyservice:7000
+      EMAIL_SERVICE_ADDR: emailservice:8080
+      PAYMENT_SERVICE_ADDR: paymentservice:50051
+      PORT: "5050"
+      PRODUCT_CATALOG_SERVICE_ADDR: productcatalogservice:3550
+      SHIPPING_SERVICE_ADDR: shippingservice:50051
+    depends_on: [cartservice, currencyservice, emailservice, paymentservice, productcatalogservice, shippingservice]
+    resources:
+      cpu: 200m
+      memory: 128Mi
+    ready:
+      tcp: localhost:5050
+      timeout: 30s
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 7000
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  currencyservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/currencyservice:v0.10.7
+    port: 7000
+    env:
+      DISABLE_PROFILER: "1"
+      PORT: "7000"
+    resources:
+      cpu: 200m
+      memory: 128Mi
+    ready:
+      tcp: localhost:7000
+      timeout: 30s
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 8080
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: port: Service emailservice listened on 5000 and forwarded to 8080: inside the space it is reached at emailservice:8080, and the addresses in env were rewritten
+  emailservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/emailservice:v0.10.7
+    port: 8080
+    env:
+      DISABLE_PROFILER: "1"
+      PORT: "8080"
+    resources:
+      cpu: 200m
+      memory: 128Mi
+    ready:
+      tcp: localhost:8080
+      timeout: 30s
+
+  # import: ready: taken from the readinessProbe
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: port: Service frontend listened on 80 and forwarded to 8080: inside the space it is reached at frontend:8080, and the addresses in env were rewritten
+  # import: port: Service frontend-external listened on 80 and forwarded to 8080: inside the space it is reached at frontend:8080, and the addresses in env were rewritten
+  # TODO(import): routes: the LoadBalancer Service exposed HTTP port 80: it becomes a gateway route — set its public hostname under spaces:
+  # import: port: Service frontend-external also fronted it: its address is rewritten to frontend
+  # import: depends_on: inferred from the addresses it calls: adservice, cartservice, checkoutservice, currencyservice, productcatalogservice, recommendationservice, shippingservice
+  frontend:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/frontend:v0.10.7
+    port: 8080
+    env:
+      AD_SERVICE_ADDR: adservice:9555
+      CART_SERVICE_ADDR: cartservice:7070
+      CHECKOUT_SERVICE_ADDR: checkoutservice:5050
+      CURRENCY_SERVICE_ADDR: currencyservice:7000
+      ENABLE_PROFILER: "0"
+      PORT: "8080"
+      PRODUCT_CATALOG_SERVICE_ADDR: productcatalogservice:3550
+      RECOMMENDATION_SERVICE_ADDR: recommendationservice:8080
+      SHIPPING_SERVICE_ADDR: shippingservice:50051
+      SHOPPING_ASSISTANT_SERVICE_ADDR: shoppingassistantservice:80
+    depends_on: [adservice, cartservice, checkoutservice, currencyservice, productcatalogservice, recommendationservice, shippingservice]
+    resources:
+      cpu: 200m
+      memory: 128Mi
+    ready:
+      http: http://localhost:8080/_healthz
+      timeout: 40s
+
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: depends_on: inferred from the addresses it calls: frontend
+  loadgenerator:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/loadgenerator:v0.10.7
+    env:
+      FRONTEND_ADDR: frontend:8080
+      RATE: "1"
+      USERS: "10"
+    depends_on: [loadgenerator-frontend-check, frontend]
+    resources:
+      cpu: 500m
+      memory: 512Mi
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 50051
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  paymentservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/paymentservice:v0.10.7
+    port: 50051
+    env:
+      DISABLE_PROFILER: "1"
+      PORT: "50051"
+    resources:
+      cpu: 200m
+      memory: 128Mi
+    ready:
+      tcp: localhost:50051
+      timeout: 30s
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 3550
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  productcatalogservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/productcatalogservice:v0.10.7
+    port: 3550
+    env:
+      DISABLE_PROFILER: "1"
+      PORT: "3550"
+    resources:
+      cpu: 200m
+      memory: 128Mi
+    ready:
+      tcp: localhost:3550
+      timeout: 30s
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 8080
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: depends_on: inferred from the addresses it calls: productcatalogservice
+  recommendationservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/recommendationservice:v0.10.7
+    port: 8080
+    env:
+      DISABLE_PROFILER: "1"
+      PORT: "8080"
+      PRODUCT_CATALOG_SERVICE_ADDR: productcatalogservice:3550
+    depends_on: [productcatalogservice]
+    resources:
+      cpu: 200m
+      memory: 450Mi
+    ready:
+      tcp: localhost:8080
+      timeout: 30s
+
+  # import: ready: taken from the readinessProbe
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: volumes: emptyDir redis-data is the named volume redis-cart-redis-data: unlike the emptyDir it survives a restart
+  redis-cart:
+    image: redis:alpine
+    port: 6379
+    volumes:
+      - redis-cart-redis-data:/data
+    resources:
+      cpu: 125m
+      memory: 256Mi
+    ready:
+      tcp: localhost:6379
+      timeout: 30s
+
+  # import: ready: the gRPC readinessProbe became a TCP probe on 50051
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  shippingservice:
+    image: us-central1-docker.pkg.dev/online-boutique-ci/microservices-demo/shippingservice:v0.10.7
+    port: 50051
+    env:
+      DISABLE_PROFILER: "1"
+      PORT: "50051"
+    resources:
+      cpu: 200m
+      memory: 128Mi
+    ready:
+      tcp: localhost:50051
+      timeout: 30s
+
+jobs:
+  # TODO(import): command: Kubernetes command: replaced the image ENTRYPOINT; deploy.yaml's command: is appended to the ENTRYPOINT instead — it is kept as command+args, which only works when the image has no ENTRYPOINT
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: jobs: was an init container of Deployment/loadgenerator: it now runs once as a job loadgenerator waits for
+  # import: depends_on: inferred from the addresses it calls: frontend
+  loadgenerator-frontend-check:
+    image: busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+    command: [/bin/sh, -exc, "MAX_RETRIES=12\nRETRY_INTERVAL=10\nfor i in $(seq 1 $MAX_RETRIES); do\n  echo \"Attempt $i: Pinging frontend: $FRONTEND_ADDR...\"\n  STATUSCODE=$(wget --server-response http://$FRONTEND_ADDR 2>&1 | awk '/^  HTTP/{print $2}')\n  if [ $STATUSCODE -eq 200 ]; then\n      echo \"Frontend is reachable.\"\n      exit 0\n  fi\n  echo \"Error: Could not reach frontend - Status code: $STATUSCODE\"\n  sleep $RETRY_INTERVAL\ndone\necho \"Failed to reach frontend after $MAX_RETRIES attempts.\"\nexit 1\n"]
+    env:
+      FRONTEND_ADDR: frontend:8080
+    depends_on: [frontend]
+
+spaces:
+  online-boutique-release-production:
+    gateway:
+      routes:
+        - service: frontend
+          host: frontend.example.com

@@ -815,6 +815,17 @@ func (st *deployStack) readiness() {
 	}
 }
 
+func (st *deployStack) backupEnv(s *deployService) {
+	s.env["SKLP_BACKUP_TO"] = st.ref("BACKUP_S3_URL", "", false)
+	s.env["AWS_ACCESS_KEY_ID"] = st.ref("BACKUP_S3_ACCESS_KEY", "", true)
+	s.env["AWS_SECRET_ACCESS_KEY"] = st.ref("BACKUP_S3_SECRET_KEY", "", true)
+	s.env["AWS_DEFAULT_REGION"] = st.ref("BACKUP_S3_REGION", "", false)
+}
+
+func isMySQL(image string) bool {
+	return imageLogPattern(image) == "ready for connections"
+}
+
 func (st *deployStack) backups() {
 	for _, s := range st.services {
 		if s.job || len(s.volumes) == 0 {
@@ -831,12 +842,17 @@ func (st *deployStack) backups() {
 				db = ` "$POSTGRES_USER"`
 			}
 			s.backup = []string{"sh", "-c", "exec pg_dump -Fc -U " + user + db}
-			s.env["SKLP_BACKUP_TO"] = st.ref("BACKUP_S3_URL", "", false)
-			s.env["AWS_ACCESS_KEY_ID"] = st.ref("BACKUP_S3_ACCESS_KEY", "", true)
-			s.env["AWS_SECRET_ACCESS_KEY"] = st.ref("BACKUP_S3_SECRET_KEY", "", true)
-			s.env["AWS_DEFAULT_REGION"] = st.ref("BACKUP_S3_REGION", "", false)
+			st.backupEnv(s)
 			s.note(Info, "backup", "a nightly pg_dump is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none")
 			continue
+		}
+		if isMySQL(s.image) {
+			if _, ok := s.env["MYSQL_ROOT_PASSWORD"]; ok {
+				s.backup = []string{"sh", "-c", `exec "$(command -v mariadb-dump || command -v mysqldump)" --single-transaction --all-databases -uroot -p"$MYSQL_ROOT_PASSWORD"`}
+				st.backupEnv(s)
+				s.note(Info, "backup", "a nightly dump of every database is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none")
+				continue
+			}
 		}
 		var names []string
 		for _, v := range s.volumes {

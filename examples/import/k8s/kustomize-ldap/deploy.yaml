@@ -1,0 +1,28 @@
+# Imported for production from source/overlays/production by `sklp init -from k8s -to deploy`.
+# 2 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: ConfigMap production-ldap-configmap-4d7m6k5b42 dropped: values were inlined where services read them
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # import: volumes: gcePersistentDisk disk ldap-data is the named volume production-ldap-service-ldap-data; its data is not copied — restore it before the first start
+  # import: volumes: emptyDir ldap-config is the named volume production-ldap-service-ldap-config: unlike the emptyDir it survives a restart
+  # import: volumes: emptyDir ldap-certs is the named volume production-ldap-service-ldap-certs: unlike the emptyDir it survives a restart
+  # TODO(import): volumes: configmap-volume mounts files from a ConfigMap/Secret on /container/environment/01-custom: bake the files into the image (`COPY`) or pass the values through env
+  # import: volumes: emptyDir container-run is the named volume production-ldap-service-container-run: unlike the emptyDir it survives a restart
+  # import: ready: no healthcheck: a TCP probe on port 389 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  # TODO(import): backup: volume(s) production-ldap-service-ldap-data hold this service's data and nothing backs them up: add a backup: block (a command writing an archive to stdout + a cron schedule) and SKLP_BACKUP_TO in env
+  production-ldap-service:
+    image: osixia/openldap:1.1.11
+    command: [--copy-service]
+    replicas: 6
+    port: 389
+    volumes:
+      - production-ldap-service-ldap-data:/var/lib/ldap
+      - production-ldap-service-ldap-config:/etc/ldap/slapd.d
+      - production-ldap-service-ldap-certs:/container/service/slapd/assets/certs
+      - production-ldap-service-container-run:/container/run
+    ready:
+      tcp: localhost:389
+      timeout: 60s

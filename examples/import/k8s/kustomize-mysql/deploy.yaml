@@ -1,0 +1,28 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 1 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: Secret mysql-pass dropped: values are never copied: each one is a ${VAR} to set
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, MYSQL_ROOT_PASSWORD (the source wrote a value for it; never reuse that one in production); settings — `sklp config set -s prod NAME value`: BACKUP_S3_REGION, BACKUP_S3_URL
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # import: volumes: emptyDir mysql-persistent-storage is the named volume mysql-persistent-storage: unlike the emptyDir it survives a restart
+  # import: backup: a nightly dump of every database is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none
+  mysql:
+    image: mysql:5.6
+    port: 3306
+    env:
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      SKLP_BACKUP_TO: ${BACKUP_S3_URL}
+    volumes:
+      - mysql-persistent-storage:/var/lib/mysql
+    ready:
+      log: ready for connections
+      timeout: 120s
+    backup:
+      schedule: 0 3 * * *
+      command: [sh, -c, exec "$(command -v mariadb-dump || command -v mysqldump)" --single-transaction --all-databases -uroot -p"$MYSQL_ROOT_PASSWORD"]
