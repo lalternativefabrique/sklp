@@ -483,6 +483,25 @@ func (c *SpaceNet) Attach(name string, containerPID int, ifName string) (string,
 	return ip.String(), nil
 }
 
+// RouteName pins the IPs that receive traffic for a service name: the space
+// DNS, ingress and L7 answer only those, while every attached IP stays a member
+// for the east-west ACL. An empty ips is a valid pin that routes nothing.
+func (c *SpaceNet) RouteName(name string, ips []string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return fmt.Errorf("spacenet: %q is closed", c.name)
+	}
+	rep, err := c.send(command{Op: "route", Name: name, IPs: ips})
+	if err != nil {
+		return err
+	}
+	if !rep.OK {
+		return fmt.Errorf("spacenet: route %q: %s", name, rep.Error)
+	}
+	return nil
+}
+
 // SpawnPeer forks a parked process inside the space's user namespace with
 // its own network namespace, returning its host-visible pid. The pid is then
 // a valid Attach target (it shares the space userns, so the veth push is

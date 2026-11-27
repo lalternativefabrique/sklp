@@ -51,6 +51,12 @@ type aclApplier interface {
 	SetACLEdges(edges []ACLEdge) error
 }
 
+// servicePinner is the optional launcher capability that pins which instance
+// IPs receive a service's traffic in the space network (runc + space net).
+type servicePinner interface {
+	RouteService(serviceName string, ips []string) error
+}
+
 // ACLEdge is one declared depends_on edge: caller service name -> target
 // service name. Exported so config.go (which builds the graph from
 // deploy.yaml) and the launcher (which resolves it to IPs) share one type

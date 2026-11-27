@@ -45,16 +45,17 @@ const envSupervisorPID = "SKLP_SPACE_SUPERVISOR_PID"
 
 // command is one line-delimited JSON request the host sends to the worker.
 type command struct {
-	Op   string `json:"op"`             // attach|detach|register|unregister|ping|resolve|spawnsim|egress|egressStatus|acl|peerBlackhole|dial|probeTCP|probeHTTP|close
-	PID  int    `json:"pid,omitempty"`  // container init pid (attach/detach)
-	IF   string `json:"if,omitempty"`   // in-container interface name (attach); egress tap name (egress); bridge name (acl)
-	CIDR string `json:"cidr,omitempty"` // container address, e.g. 10.88.0.2/24 (attach); bridge subnet (egress)
-	Host string `json:"host,omitempty"` // host-side veth name (space netns)
-	Peer string `json:"peer,omitempty"` // peer veth name before rename
-	GwIP string `json:"gw,omitempty"`   // gateway IP for the default route
-	Dst  string `json:"dst,omitempty"`  // ping target IP (ping op)
-	Name string `json:"name,omitempty"` // service name for the DNS table (register/unregister)
-	IP   string `json:"ip,omitempty"`   // service IP for the DNS table (register/unregister)
+	Op   string   `json:"op"`             // attach|detach|register|unregister|route|ping|resolve|spawnsim|egress|egressStatus|acl|peerBlackhole|dial|probeTCP|probeHTTP|close
+	PID  int      `json:"pid,omitempty"`  // container init pid (attach/detach)
+	IF   string   `json:"if,omitempty"`   // in-container interface name (attach); egress tap name (egress); bridge name (acl)
+	CIDR string   `json:"cidr,omitempty"` // container address, e.g. 10.88.0.2/24 (attach); bridge subnet (egress)
+	Host string   `json:"host,omitempty"` // host-side veth name (space netns)
+	Peer string   `json:"peer,omitempty"` // peer veth name before rename
+	GwIP string   `json:"gw,omitempty"`   // gateway IP for the default route
+	Dst  string   `json:"dst,omitempty"`  // ping target IP (ping op)
+	Name string   `json:"name,omitempty"` // service name for the DNS table (register/unregister)
+	IP   string   `json:"ip,omitempty"`   // service IP for the DNS table (register/unregister)
+	IPs  []string `json:"ips,omitempty"`  // IPs that receive a service's traffic (route)
 
 	// spawnoverlay op only: the per-service overlayfs dirs the holder mounts.
 	Lower  string `json:"lower,omitempty"`  // lowerdir: shared digest rootfs (RO)
@@ -354,6 +355,17 @@ func dispatch(capNS netns.NsHandle, names *nameTable, l7 *l7Ingress, cmd command
 		return reply{OK: true}
 	case "unregister":
 		names.unregister(cmd.Name, net.ParseIP(cmd.IP))
+		return reply{OK: true}
+	case "route":
+		ips := make([]net.IP, 0, len(cmd.IPs))
+		for _, raw := range cmd.IPs {
+			ip := net.ParseIP(raw)
+			if ip == nil {
+				return reply{Error: fmt.Sprintf("route %q: invalid ip %q", cmd.Name, raw)}
+			}
+			ips = append(ips, ip)
+		}
+		names.route(cmd.Name, ips)
 		return reply{OK: true}
 	case "acl":
 		if err := programACL(cmd.IF, cmd.Edges, names); err != nil {

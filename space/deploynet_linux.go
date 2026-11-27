@@ -229,6 +229,10 @@ func (c *spaceNet) setACLEdges(edges []ACLEdge) error {
 	return c.cnet.SetACLEdges(converted)
 }
 
+func (c *spaceNet) routeName(name string, ips []string) error {
+	return c.cnet.RouteName(name, ips)
+}
+
 // planAttach reserves the IP + veth names the createRuntime hook will use for a
 // service, BEFORE its container starts. The returned attachPlan is embedded as
 // hook args in the service spec; bindAttach records it (once the pid is known)

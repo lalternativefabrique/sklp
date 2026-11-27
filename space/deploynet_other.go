@@ -46,6 +46,7 @@ func (c *spaceNet) attach(string, int) (string, error)          { return "", nil
 func (c *spaceNet) hookAttachReady() bool                       { return false }
 func (c *spaceNet) setL7Routes(string) error                    { return nil }
 func (c *spaceNet) setACLEdges([]ACLEdge) error                 { return nil }
+func (c *spaceNet) routeName(string, []string) error            { return nil }
 func (c *spaceNet) planAttach(string) (*attachPlan, error) {
 	return nil, fmt.Errorf("space network requires linux")
 }

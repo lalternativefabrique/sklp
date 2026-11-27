@@ -178,6 +178,11 @@ func (l *runcLauncher) SetL7Routes(routesJSON string) error {
 	return l.rt.SetL7Routes(routesJSON)
 }
 
+// RouteService satisfies the agent's optional servicePinner.
+func (l *runcLauncher) RouteService(serviceName string, ips []string) error {
+	return l.rt.RouteService(serviceName, ips)
+}
+
 // SetACLEdges pushes the declared depends_on graph to the space's east-west
 // forward-chain ACL. It satisfies the agent's optional aclApplier; the exec
 // test launcher implements no such method, so the agent's ACL push is inert

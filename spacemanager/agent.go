@@ -168,6 +168,9 @@ type serviceState struct {
 	// backends is the last address set pushed to the proxy for this service,
 	// kept so we only call SetBackends when the Ready set actually changes.
 	backends []string
+	// routed is the instance IP set last pinned in the space network; nil
+	// until the first pin, so an empty pin is still pushed once.
+	routed []string
 }
 
 // slotIDs is the set of instance ids the steady-state service should run: the
@@ -276,6 +279,7 @@ type Agent struct {
 	ipPort       ipPortProvider                             // per-instance container IP+port; nil when unsupported
 	connCounter  func(inst *instance) (int, bool)           // established connections to an instance; nil when unobservable
 	acl          aclApplier                                 // east-west forward-chain ACL push; nil when unsupported
+	pinner       servicePinner                              // routed-set push to the space network; nil when unsupported
 	opts         Options
 	logger       *log.Logger
 	observe      StateObserver
@@ -389,6 +393,9 @@ func NewAgent(launcher Launcher, ready readyChecker, desired []Service, opts Opt
 	// unsupported launcher's Space keeps the flat east-west it always had.
 	if ap, ok := launcher.(aclApplier); ok {
 		a.acl = ap
+	}
+	if sp, ok := launcher.(servicePinner); ok {
+		a.pinner = sp
 	}
 	// Container-log streaming is active only when a sink is configured AND the
 	// launcher can map an instance id to its captured log file. The exec test
@@ -1344,6 +1351,7 @@ func (a *Agent) waitPendingStop(ctx context.Context, id string) error {
 // here BEFORE it is killed elsewhere. A no-op for non-proxied services or when
 // no proxy is injected.
 func (a *Agent) syncProxyLocked(svcName string) {
+	a.syncRoutedLocked(svcName)
 	if a.proxy == nil {
 		return
 	}
@@ -1364,6 +1372,45 @@ func (a *Agent) syncProxyLocked(svcName string) {
 	if err := a.proxy.SetBackends(svc, addrs); err != nil {
 		a.logger.Printf("proxy: SetBackends(%q) failed: %v", svc, err)
 	}
+}
+
+// syncRoutedLocked pins, in the space network, the IPs of the instances that
+// receive the service's traffic: Ready and not retired by a rollout. The space
+// DNS, ingress and L7 then answer only those, so a cutover moves every new
+// connection to the new generation at once and a rollback moves it back.
+// Nothing is pinned while a Ready instance has no known IP, which would route
+// the service to nothing. Caller holds a.mu.
+func (a *Agent) syncRoutedLocked(svcName string) {
+	if a.pinner == nil || a.ipPort == nil {
+		return
+	}
+	st := a.services[svcName]
+	if st == nil {
+		return
+	}
+	if _, _, mesh := splitMeshTarget(svcName); mesh {
+		return
+	}
+	ips := []string{}
+	for _, inst := range a.instances {
+		if inst.svcName != svcName || inst.retired || inst.state != Ready || inst.pid == 0 {
+			continue
+		}
+		ip, _, ok := a.ipPort.IPPort(inst.id)
+		if !ok || ip == "" {
+			return
+		}
+		ips = append(ips, ip)
+	}
+	sort.Strings(ips)
+	if st.routed != nil && equalStrings(ips, st.routed) {
+		return
+	}
+	if err := a.pinner.RouteService(svcName, ips); err != nil {
+		a.logger.Printf("space network: RouteService(%q) failed: %v", svcName, err)
+		return
+	}
+	st.routed = ips
 }
 
 // syncACLLocked pushes the WHOLE desired depends_on graph to the space's
