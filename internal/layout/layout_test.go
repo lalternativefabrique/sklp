@@ -34,10 +34,13 @@ func sampleRepo(t *testing.T) string {
 		"empty":      {},                            // stack dir, no contracts
 		"pipelines":  {"ci.yaml", "publish.yaml"},
 		"tasks":      {"legacy.yaml"},
+		"cache":      {"x.json"},
+		"run":        {"dev-1.json"},
+		"logs":       {"ci-1.log"},
 	})
 }
 
-func TestStacksExcludesPipelinesAndTasks(t *testing.T) {
+func TestStacksExcludesPipelinesTasksAndRuntimeDirs(t *testing.T) {
 	l := New(sampleRepo(t))
 	got, err := l.Stacks()
 	if err != nil {

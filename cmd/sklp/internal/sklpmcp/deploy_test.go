@@ -466,7 +466,7 @@ var writeTools = []string{"deploy_follow", "dev_up", "dev_down", "space_stop", "
 func TestProtocolEndToEnd(t *testing.T) {
 	h := newHarness(t, false)
 	initRes := h.cs.InitializeResult()
-	if initRes.ServerInfo.Name != "sklp" || initRes.ProtocolVersion == "" {
+	if initRes.ServerInfo.Name != "sklp" || initRes.ProtocolVersion == "" || !strings.Contains(initRes.Instructions, "sklp_guide") {
 		t.Fatalf("initialize = %+v", initRes)
 	}
 	tools, err := h.cs.ListTools(context.Background(), nil)

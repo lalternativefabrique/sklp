@@ -45,3 +45,21 @@ func TestDevConfig_EmptyRepo(t *testing.T) {
 		t.Error("expected a NOTE when no app modules were found")
 	}
 }
+
+func TestDevConfigBindsAKnownDevServerAndPublishesItsPort(t *testing.T) {
+	for _, c := range []struct{ dep, run, port string }{
+		{"next", "run: pnpm dev -H 0.0.0.0 -p 3000", "3000"},
+		{"vite", "run: pnpm dev --host 0.0.0.0 --port 5173", "5173"},
+	} {
+		dir := mkRepo(t, map[string]string{
+			"package.json":   `{"scripts":{"dev":"x"},"dependencies":{"` + c.dep + `":"1"}}`,
+			"pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+		})
+		out, _ := DevConfig(dir)
+		for _, w := range []string{c.run, `ports: ["` + c.port + ":" + c.port + `"]`, "tcp: localhost:" + c.port} {
+			if !strings.Contains(out, w) {
+				t.Errorf("%s draft missing %q:\n%s", c.dep, w, out)
+			}
+		}
+	}
+}

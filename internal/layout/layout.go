@@ -43,7 +43,11 @@ func (l Layout) root() (string, error) {
 	return filepath.Join(abs, ".sklp"), nil
 }
 
-// Stacks returns every stack folder under .sklp/ (pipelines/ and tasks/ excluded), sorted.
+// runtimeDirs are written under .sklp/ by sklp itself: plan and run caches,
+// dev supervisor state, pipeline logs. None of them is a stack.
+var runtimeDirs = map[string]bool{"cache": true, "run": true, "logs": true}
+
+// Stacks returns every stack folder under .sklp/ (pipelines/, tasks/ and sklp's runtime dirs excluded), sorted.
 func (l Layout) Stacks() ([]string, error) {
 	root, err := l.root()
 	if err != nil {
@@ -61,7 +65,7 @@ func (l Layout) Stacks() ([]string, error) {
 		if !e.IsDir() {
 			continue
 		}
-		if e.Name() == pipelinesName || e.Name() == tasksName {
+		if e.Name() == pipelinesName || e.Name() == tasksName || runtimeDirs[e.Name()] {
 			continue
 		}
 		names = append(names, e.Name())

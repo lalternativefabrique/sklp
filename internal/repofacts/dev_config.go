@@ -96,6 +96,13 @@ func writeDevService(b *strings.Builder, s SuggestedService) {
 	if s.Workdir != "" {
 		fmt.Fprintf(b, "    workdir: %s\n", s.Workdir)
 	}
+	if len(s.Ports) > 0 {
+		quoted := make([]string, len(s.Ports))
+		for i, p := range s.Ports {
+			quoted[i] = fmt.Sprintf("%q", p)
+		}
+		fmt.Fprintf(b, "    ports: [%s]\n", strings.Join(quoted, ", "))
+	}
 	writeDependsOn(b, s.DependsOn)
 	if s.Optional {
 		b.WriteString("    optional: true\n")
