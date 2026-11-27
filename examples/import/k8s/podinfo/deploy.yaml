@@ -1,0 +1,26 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 2 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: HorizontalPodAutoscaler podinfo dropped: replicas are fixed: set replicas: to the load you expect
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # TODO(import): command: Kubernetes command: replaced the image ENTRYPOINT; deploy.yaml's command: is appended to the ENTRYPOINT instead — it is kept as command+args, which only works when the image has no ENTRYPOINT
+  # TODO(import): ready: the readinessProbe ran `podcli check http localhost:9898/readyz`, which a node cannot exec: set ready.http, ready.tcp or ready.log
+  # import: volumes: emptyDir data is the named volume podinfo-data: unlike the emptyDir it survives a restart
+  # import: ready: no healthcheck: a TCP probe on port 9898 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  podinfo:
+    image: ghcr.io/stefanprodan/podinfo:6.17.0
+    command: [./podinfo, --port=9898, --port-metrics=9797, --grpc-port=9999, --grpc-service-name=podinfo, --level=info, --random-delay=false, --random-error=false]
+    port: 9898
+    env:
+      PODINFO_UI_COLOR: '#34577c'
+    volumes:
+      - podinfo-data:/data
+    resources:
+      cpu: 2000m
+      memory: 512Mi
+    ready:
+      tcp: localhost:9898
+      timeout: 60s

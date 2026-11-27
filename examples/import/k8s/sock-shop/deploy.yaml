@@ -1,0 +1,250 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 8 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: Namespace sock-shop dropped: a deploy runs in its own space
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space sock-shop-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: MYSQL_ROOT_PASSWORD (the source wrote a value for it; never reuse that one in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # import: securityContext: capabilities NET_BIND_SERVICE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: volumes: emptyDir tmp-volume is the named volume carts-tmp-volume: unlike the emptyDir it survives a restart
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # import: ready: no healthcheck: a TCP probe on port 80 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  carts:
+    image: weaveworksdemos/carts:0.4.8
+    port: 80
+    env:
+      JAVA_OPTS: -Xms64m -Xmx128m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom -Dspring.zipkin.enabled=false
+    volumes:
+      - carts-tmp-volume:/tmp
+    capabilities: [NET_BIND_SERVICE]
+    resources:
+      cpu: 300m
+      memory: 500Mi
+    ready:
+      tcp: localhost:80
+      timeout: 60s
+
+  # TODO(import): image: mongo is not pinned: production must name an exact version (a rollout only changes what the file says)
+  # import: securityContext: capabilities CHOWN, SETGID, SETUID copied; the node's admission policy refuses the dangerous ones at apply
+  # import: volumes: emptyDir tmp-volume is the named volume carts-db-tmp-volume: unlike the emptyDir it survives a restart
+  # import: nodeSelector dropped: one node runs the whole deploy
+  carts-db:
+    image: mongo
+    port: 27017
+    volumes:
+      - carts-db-tmp-volume:/tmp
+    capabilities: [CHOWN, SETGID, SETUID]
+    ready:
+      log: Waiting for connections
+      timeout: 120s
+
+  # TODO(import): command: Kubernetes command: replaced the image ENTRYPOINT; deploy.yaml's command: is appended to the ENTRYPOINT instead — it is kept as command+args, which only works when the image has no ENTRYPOINT
+  # import: ready: taken from the readinessProbe
+  # import: securityContext: capabilities NET_BIND_SERVICE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: nodeSelector dropped: one node runs the whole deploy
+  catalogue:
+    image: weaveworksdemos/catalogue:0.3.5
+    command: [/app, -port=80]
+    port: 80
+    capabilities: [NET_BIND_SERVICE]
+    resources:
+      cpu: 200m
+      memory: 200Mi
+    ready:
+      http: http://localhost:80/health
+      timeout: 189s
+
+  # import: env: MYSQL_ROOT_PASSWORD was written in clear in the manifest: it is now ${MYSQL_ROOT_PASSWORD}, a secret to set per deployment
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # import: ready: no healthcheck: a TCP probe on port 3306 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  catalogue-db:
+    image: weaveworksdemos/catalogue-db:0.3.0
+    port: 3306
+    env:
+      MYSQL_DATABASE: socksdb
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ready:
+      tcp: localhost:3306
+      timeout: 60s
+
+  # import: ready: taken from the readinessProbe
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: port: Service front-end listened on 80 and forwarded to 8079: inside the space it is reached at front-end:8079, and the addresses in env were rewritten
+  # TODO(import): routes: the NodePort Service exposed HTTP port 80: it becomes a gateway route — set its public hostname under spaces:
+  # import: nodeSelector dropped: one node runs the whole deploy
+  front-end:
+    image: weaveworksdemos/front-end:0.3.12
+    port: 8079
+    env:
+      SESSION_REDIS: "true"
+    resources:
+      cpu: 300m
+      memory: 1000Mi
+    ready:
+      http: http://localhost:8079/
+      timeout: 39s
+
+  # import: securityContext: capabilities NET_BIND_SERVICE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: volumes: emptyDir tmp-volume is the named volume orders-tmp-volume: unlike the emptyDir it survives a restart
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # import: ready: no healthcheck: a TCP probe on port 80 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  orders:
+    image: weaveworksdemos/orders:0.4.7
+    port: 80
+    env:
+      JAVA_OPTS: -Xms64m -Xmx128m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom -Dspring.zipkin.enabled=false
+    volumes:
+      - orders-tmp-volume:/tmp
+    capabilities: [NET_BIND_SERVICE]
+    resources:
+      cpu: 500m
+      memory: 500Mi
+    ready:
+      tcp: localhost:80
+      timeout: 60s
+
+  # TODO(import): image: mongo is not pinned: production must name an exact version (a rollout only changes what the file says)
+  # import: securityContext: capabilities CHOWN, SETGID, SETUID copied; the node's admission policy refuses the dangerous ones at apply
+  # import: volumes: emptyDir tmp-volume is the named volume orders-db-tmp-volume: unlike the emptyDir it survives a restart
+  # import: nodeSelector dropped: one node runs the whole deploy
+  orders-db:
+    image: mongo
+    port: 27017
+    volumes:
+      - orders-db-tmp-volume:/tmp
+    capabilities: [CHOWN, SETGID, SETUID]
+    ready:
+      log: Waiting for connections
+      timeout: 120s
+
+  # import: ready: taken from the readinessProbe
+  # import: securityContext: capabilities NET_BIND_SERVICE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: nodeSelector dropped: one node runs the whole deploy
+  payment:
+    image: weaveworksdemos/payment:0.4.3
+    port: 80
+    capabilities: [NET_BIND_SERVICE]
+    resources:
+      cpu: 200m
+      memory: 200Mi
+    ready:
+      http: http://localhost:80/health
+      timeout: 189s
+
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # import: ready: no healthcheck: a TCP probe on port 80 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  queue-master:
+    image: weaveworksdemos/queue-master:0.3.1
+    port: 80
+    env:
+      JAVA_OPTS: -Xms64m -Xmx128m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom -Dspring.zipkin.enabled=false
+    resources:
+      cpu: 300m
+      memory: 500Mi
+    ready:
+      tcp: localhost:80
+      timeout: 60s
+
+  # import: securityContext: capabilities CHOWN, SETGID, SETUID, DAC_OVERRIDE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: port: Service rabbitmq listened on 9090 and forwarded to 0: inside the space it is reached at rabbitmq:0, and the addresses in env were rewritten
+  # import: nodeSelector dropped: one node runs the whole deploy
+  rabbitmq:
+    image: rabbitmq:3.6.8-management
+    port: 15672
+    capabilities: [CHOWN, SETGID, SETUID, DAC_OVERRIDE]
+    ready:
+      log: Server startup complete
+      timeout: 120s
+
+  # TODO(import): image: kbudde/rabbitmq-exporter is not pinned: production must name an exact version (a rollout only changes what the file says)
+  # TODO(import): was a container of the Deployment/rabbitmq pod, sharing localhost with rabbitmq: inside the space it is a separate service — replace localhost:<port> between them with <service>:<port>, and give it the volumes they shared
+  # import: ready: no healthcheck: a TCP probe on port 9090 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  rabbitmq-rabbitmq-exporter:
+    image: kbudde/rabbitmq-exporter
+    port: 9090
+    ready:
+      tcp: localhost:9090
+      timeout: 60s
+
+  # import: securityContext: capabilities CHOWN, SETGID, SETUID copied; the node's admission policy refuses the dangerous ones at apply
+  # import: nodeSelector dropped: one node runs the whole deploy
+  session-db:
+    image: redis:alpine
+    port: 6379
+    capabilities: [CHOWN, SETGID, SETUID]
+    ready:
+      log: Ready to accept connections
+      timeout: 120s
+
+  # import: securityContext: capabilities NET_BIND_SERVICE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: volumes: emptyDir tmp-volume is the named volume shipping-tmp-volume: unlike the emptyDir it survives a restart
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # TODO(import): env: ZIPKIN reaches zipkin.jaeger.svc.cluster.local, a Service outside these manifests: replace it with that service's public URL
+  # import: ready: no healthcheck: a TCP probe on port 80 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  shipping:
+    image: weaveworksdemos/shipping:0.4.8
+    port: 80
+    env:
+      JAVA_OPTS: -Xms64m -Xmx128m -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom -Dspring.zipkin.enabled=false
+      ZIPKIN: zipkin.jaeger.svc.cluster.local
+    volumes:
+      - shipping-tmp-volume:/tmp
+    capabilities: [NET_BIND_SERVICE]
+    resources:
+      cpu: 300m
+      memory: 500Mi
+    ready:
+      tcp: localhost:80
+      timeout: 60s
+
+  # import: ready: taken from the readinessProbe
+  # import: securityContext: capabilities NET_BIND_SERVICE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: securityContext: runAsUser/runAsGroup/fsGroup dropped: the service runs as the image's user inside a rootless user namespace
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # import: depends_on: inferred from the addresses it calls: user-db
+  user:
+    image: weaveworksdemos/user:0.4.7
+    port: 80
+    env:
+      mongo: user-db:27017
+    depends_on: [user-db]
+    capabilities: [NET_BIND_SERVICE]
+    resources:
+      cpu: 300m
+      memory: 200Mi
+    ready:
+      http: http://localhost:80/health
+      timeout: 189s
+
+  # import: securityContext: capabilities CHOWN, SETGID, SETUID copied; the node's admission policy refuses the dangerous ones at apply
+  # import: volumes: emptyDir tmp-volume is the named volume user-db-tmp-volume: unlike the emptyDir it survives a restart
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # import: ready: no healthcheck: a TCP probe on port 27017 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  user-db:
+    image: weaveworksdemos/user-db:0.3.0
+    port: 27017
+    volumes:
+      - user-db-tmp-volume:/tmp
+    capabilities: [CHOWN, SETGID, SETUID]
+    ready:
+      tcp: localhost:27017
+      timeout: 60s
+
+spaces:
+  sock-shop-production:
+    gateway:
+      routes:
+        - service: front-end
+          host: front-end.example.com

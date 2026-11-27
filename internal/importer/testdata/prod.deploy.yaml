@@ -1,11 +1,11 @@
 # Imported for production from compose.yaml + compose.prod.yaml by `sklp init -from compose -to deploy`.
-# 4 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# 3 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
 # import: files: compose.override.yaml is not imported: the default override holds local development tweaks; put production-only settings in compose.prod.yaml and import again
 # TODO(import): services: traefik (traefik:v3.1) is the edge proxy of the compose setup: it is left out, the node gateway terminates TLS and routes hosts — check the routes under spaces: cover what it served
 # import: profiles: services behind a compose profile are left out of production: adminer — add them by hand if they belong there
 # import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
 # import: spaces: routes live in space prod-production: rename it to the space this deploy should own
-# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, SESSION_SECRET (compose defaulted it; never reuse that default in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, CACHE_TTL
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, MYSQL_PASSWORD, MYSQL_ROOT_PASSWORD, SESSION_SECRET (the source wrote a value for it; never reuse that one in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, BACKUP_S3_REGION, BACKUP_S3_URL, CACHE_TTL
 version: 1
 kind: deploy
 name: prod
@@ -52,19 +52,26 @@ services:
       timeout: 60s
 
   # import: healthcheck: `mysqladmin ping -h localhost` replaced by the log line "ready for connections": the node cannot exec a probe
-  # TODO(import): backup: volume(s) dbdata hold this service's data and nothing backs them up: add a backup: block (a command writing an archive to stdout + a cron schedule) and SKLP_BACKUP_TO in env
+  # import: backup: a nightly dump of every database is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none
   db:
     image: mysql:8.4
     env:
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
       MYSQL_DATABASE: shop
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_USER: shop
+      SKLP_BACKUP_TO: ${BACKUP_S3_URL}
     volumes:
       - dbdata:/var/lib/mysql
     ready:
       log: ready for connections
       timeout: 120s
+    backup:
+      schedule: 0 3 * * *
+      command: [sh, -c, exec "$(command -v mariadb-dump || command -v mysqldump)" --single-transaction --all-databases -uroot -p"$MYSQL_ROOT_PASSWORD"]
 
   # import: ports: UDP 7882 (container 7882) published on every host address, as compose did
   # import: cap_add: copied to capabilities:; the node's admission policy refuses the dangerous ones (SYS_ADMIN, NET_ADMIN, ...) at apply

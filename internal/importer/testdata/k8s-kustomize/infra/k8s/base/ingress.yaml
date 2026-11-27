@@ -1,0 +1,62 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: compress
+spec:
+  compress: {}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+spec:
+  headers:
+    frameDeny: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: acme-http
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`acme.test`)
+      kind: Rule
+      middlewares:
+        - name: redirect-https
+      services:
+        - name: acme-web
+          port: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: acme
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: Host(`acme.test`) && PathPrefix(`/api`)
+      kind: Rule
+      middlewares:
+        - name: security-headers
+      services:
+        - name: acme-core
+          port: 4100
+    - match: Host(`acme.test`) || Host(`www.acme.test`)
+      kind: Rule
+      middlewares:
+        - name: compress
+        - name: security-headers
+      services:
+        - name: acme-web
+          port: 80
+  tls:
+    secretName: acme-tls

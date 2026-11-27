@@ -1,6 +1,6 @@
 # Imported for production from compose.yml by `sklp init -from compose -to deploy`.
 # 2 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
-# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: POSTGRES_PASSWORD (compose defaulted it; never reuse that default in production)
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: POSTGRES_PASSWORD (the source wrote a value for it; never reuse that one in production)
 version: 1
 kind: deploy
 name: prod

@@ -56,7 +56,7 @@ func ImportComposeDeploy(opts ComposeOptions) (*ComposeImport, error) {
 	project := slug(filepath.Base(absOr(opts.Root)))
 	d := &deployTranslator{
 		translator: &translator{opts: opts, proj: proj, vars: loadVarSource(opts.Root), stack: &devStack{}},
-		st:         &deployStack{name: opts.Stack, space: project + "-production", project: project, vars: map[string]*deployVar{}},
+		st:         &deployStack{origin: "compose", name: opts.Stack, space: project + "-production", project: project, vars: map[string]*deployVar{}},
 	}
 	if skipped != "" {
 		d.stackNote(Info, "files", "%s is not imported: the default override holds local development tweaks; put production-only settings in compose.prod.yaml and import again", skipped)
@@ -74,6 +74,8 @@ func absOr(p string) string {
 
 type deployStack struct {
 	name, space, project string
+	origin               string
+	registries           []deployRegistry
 	envFiles             []string
 	services             []*deployService
 	vars                 map[string]*deployVar
@@ -106,6 +108,10 @@ func (st *deployStack) hasRoutes() bool {
 	return false
 }
 
+type deployRegistry struct {
+	host, username, password string
+}
+
 type deployVar struct {
 	name, def, file string
 	secret, hasDef  bool
@@ -113,7 +119,9 @@ type deployVar struct {
 }
 
 type deployRoute struct {
-	host, path string
+	host, path      string
+	compress        bool
+	securityHeaders bool
 }
 
 type deployService struct {
@@ -131,6 +139,9 @@ type deployService struct {
 	ready        *devReady
 	backup       []string
 	job          bool
+	schedule     string
+	scratch      []string
+	waitsFor     []string
 	routes       []deployRoute
 	routePort    int
 	fromBuild    bool
@@ -149,7 +160,11 @@ type deployTranslator struct {
 }
 
 func (d *deployTranslator) stackNote(sev Severity, field, format string, args ...any) {
-	d.st.notes = append(d.st.notes, Note{Severity: sev, Field: field, Message: fmt.Sprintf(format, args...)})
+	d.st.stackNote(sev, field, format, args...)
+}
+
+func (st *deployStack) stackNote(sev Severity, field, format string, args ...any) {
+	st.notes = append(st.notes, Note{Severity: sev, Field: field, Message: fmt.Sprintf(format, args...)})
 }
 
 var deployDroppedFields = map[string]string{
@@ -214,15 +229,19 @@ func (d *deployTranslator) translate() {
 			d.dependsOn(s, cs)
 		}
 	}
-	d.readiness()
-	d.backups()
+	d.st.readiness()
+	d.st.backups()
 	d.topLevel()
-	if d.st.hasRoutes() {
-		d.ref("ACME_EMAIL", "", false)
-		d.stackNote(Info, "gateway", "the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node")
-		d.stackNote(Info, "spaces", "routes live in space %s: rename it to the space this deploy should own", d.st.space)
+	d.st.finish()
+}
+
+func (st *deployStack) finish() {
+	if st.hasRoutes() {
+		st.ref("ACME_EMAIL", "", false)
+		st.stackNote(Info, "gateway", "the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node")
+		st.stackNote(Info, "spaces", "routes live in space %s: rename it to the space this deploy should own", st.space)
 	}
-	d.varsNote()
+	st.varsNote()
 }
 
 func (d *deployTranslator) service(cs composeService) *deployService {
@@ -767,8 +786,8 @@ func (d *deployTranslator) dependsOn(s *deployService, cs composeService) {
 	}
 }
 
-func (d *deployTranslator) readiness() {
-	for _, s := range d.st.services {
+func (st *deployStack) readiness() {
+	for _, s := range st.services {
 		if s.job {
 			if s.healthProbe != nil {
 				s.note(Info, "healthcheck", "dropped: a job signals readiness by exiting 0")
@@ -796,12 +815,23 @@ func (d *deployTranslator) readiness() {
 	}
 }
 
-func (d *deployTranslator) backups() {
-	for _, s := range d.st.services {
+func (st *deployStack) backupEnv(s *deployService) {
+	s.env["SKLP_BACKUP_TO"] = st.ref("BACKUP_S3_URL", "", false)
+	s.env["AWS_ACCESS_KEY_ID"] = st.ref("BACKUP_S3_ACCESS_KEY", "", true)
+	s.env["AWS_SECRET_ACCESS_KEY"] = st.ref("BACKUP_S3_SECRET_KEY", "", true)
+	s.env["AWS_DEFAULT_REGION"] = st.ref("BACKUP_S3_REGION", "", false)
+}
+
+func isMySQL(image string) bool {
+	return imageLogPattern(image) == "ready for connections"
+}
+
+func (st *deployStack) backups() {
+	for _, s := range st.services {
 		if s.job || len(s.volumes) == 0 {
 			continue
 		}
-		if imageLogPattern(s.image) == "database system is ready to accept connections" {
+		if isPostgres(s.image) {
 			user, db := "postgres", ""
 			if _, ok := s.env["POSTGRES_USER"]; ok {
 				user = `"$POSTGRES_USER"`
@@ -812,16 +842,26 @@ func (d *deployTranslator) backups() {
 				db = ` "$POSTGRES_USER"`
 			}
 			s.backup = []string{"sh", "-c", "exec pg_dump -Fc -U " + user + db}
-			s.env["SKLP_BACKUP_TO"] = d.ref("BACKUP_S3_URL", "", false)
-			s.env["AWS_ACCESS_KEY_ID"] = d.ref("BACKUP_S3_ACCESS_KEY", "", true)
-			s.env["AWS_SECRET_ACCESS_KEY"] = d.ref("BACKUP_S3_SECRET_KEY", "", true)
-			s.env["AWS_DEFAULT_REGION"] = d.ref("BACKUP_S3_REGION", "", false)
-			s.note(Info, "backup", "a nightly pg_dump is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); compose had no backup")
+			st.backupEnv(s)
+			s.note(Info, "backup", "a nightly pg_dump is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none")
 			continue
+		}
+		if isMySQL(s.image) {
+			if _, ok := s.env["MYSQL_ROOT_PASSWORD"]; ok {
+				s.backup = []string{"sh", "-c", `exec "$(command -v mariadb-dump || command -v mysqldump)" --single-transaction --all-databases -uroot -p"$MYSQL_ROOT_PASSWORD"`}
+				st.backupEnv(s)
+				s.note(Info, "backup", "a nightly dump of every database is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none")
+				continue
+			}
 		}
 		var names []string
 		for _, v := range s.volumes {
-			names = append(names, strings.SplitN(v, ":", 2)[0])
+			if n := strings.SplitN(v, ":", 2)[0]; !containsString(s.scratch, n) {
+				names = append(names, n)
+			}
+		}
+		if len(names) == 0 {
+			continue
 		}
 		s.note(Manual, "backup", "volume(s) %s hold this service's data and nothing backs them up: add a backup: block (a command writing an archive to stdout + a cron schedule) and SKLP_BACKUP_TO in env", strings.Join(names, ", "))
 	}
@@ -843,11 +883,23 @@ func (d *deployTranslator) topLevel() {
 
 var secretNameRE = regexp.MustCompile(`(?i)(PASS|SECRET|TOKEN|KEY|CREDENTIAL|PRIVATE|SALT|AUTH|DSN)`)
 
+func isPostgres(image string) bool {
+	return imageLogPattern(image) == "database system is ready to accept connections"
+}
+
 func (d *deployTranslator) ref(name, def string, secret bool) string {
-	v := d.st.vars[name]
+	r := d.st.ref(name, def, secret)
+	if d.vars.local[name] {
+		d.st.vars[name].local = true
+	}
+	return r
+}
+
+func (st *deployStack) ref(name, def string, secret bool) string {
+	v := st.vars[name]
 	if v == nil {
-		v = &deployVar{name: name, local: d.vars.local[name]}
-		d.st.vars[name] = v
+		v = &deployVar{name: name}
+		st.vars[name] = v
 	}
 	if secret || secretNameRE.MatchString(name) {
 		v.secret = true
@@ -910,24 +962,24 @@ func (d *deployTranslator) resolve(s noter, where, name, op, def string) string 
 	return d.ref(name, "", false)
 }
 
-func (d *deployTranslator) varsNote() {
-	if len(d.st.vars) == 0 {
+func (st *deployStack) varsNote() {
+	if len(st.vars) == 0 {
 		return
 	}
-	names := make([]string, 0, len(d.st.vars))
-	for n := range d.st.vars {
+	names := make([]string, 0, len(st.vars))
+	for n := range st.vars {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	var secrets, plain []string
 	for _, n := range names {
-		v := d.st.vars[n]
+		v := st.vars[n]
 		label := n
 		switch {
 		case v.hasDef && v.secret:
-			label += " (compose defaulted it; never reuse that default in production)"
+			label += " (the source wrote a value for it; never reuse that one in production)"
 		case v.hasDef:
-			label += fmt.Sprintf(" (compose default %q)", v.def)
+			label += fmt.Sprintf(" (default %q)", v.def)
 		case v.file != "":
 			label += " (read from " + v.file + ")"
 		case v.local:
@@ -941,18 +993,18 @@ func (d *deployTranslator) varsNote() {
 	}
 	var parts []string
 	if len(secrets) > 0 {
-		parts = append(parts, fmt.Sprintf("secrets — `sklp config set -s %s -secret NAME value`: %s", d.st.name, strings.Join(secrets, ", ")))
+		parts = append(parts, fmt.Sprintf("secrets — `sklp config set -s %s -secret NAME value`: %s", st.name, strings.Join(secrets, ", ")))
 	}
 	if len(plain) > 0 {
-		parts = append(parts, fmt.Sprintf("settings — `sklp config set -s %s NAME value`: %s", d.st.name, strings.Join(plain, ", ")))
+		parts = append(parts, fmt.Sprintf("settings — `sklp config set -s %s NAME value`: %s", st.name, strings.Join(plain, ", ")))
 	}
-	d.stackNote(Manual, "variables", "sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). %s", strings.Join(parts, "; "))
+	st.stackNote(Manual, "variables", "sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). %s", strings.Join(parts, "; "))
 }
 
 func renderDeploy(st *deployStack, sources []string) []byte {
 	root := mapping()
 	header := []string{
-		"Imported for production from " + strings.Join(sources, " + ") + " by `sklp init -from compose -to deploy`.",
+		"Imported for production from " + strings.Join(sources, " + ") + " by `sklp init -from " + st.origin + " -to deploy`.",
 		fmt.Sprintf("%d manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.", ManualCount(st.allNotes())),
 	}
 	for _, n := range st.notes {
@@ -964,6 +1016,16 @@ func renderDeploy(st *deployStack, sources []string) []byte {
 	put(root, "name", scalar(st.name))
 	if len(st.envFiles) > 0 {
 		put(root, "env_files", seq(st.envFiles))
+	}
+	if len(st.registries) > 0 {
+		regs := mapping()
+		for _, r := range st.registries {
+			rm := mapping()
+			put(rm, "username", scalar(r.username))
+			put(rm, "password", scalar(r.password))
+			put(regs, r.host, rm)
+		}
+		put(root, "registries", regs)
 	}
 	if st.hasRoutes() {
 		gw := mapping()
@@ -999,6 +1061,12 @@ func renderDeploy(st *deployStack, sources []string) []byte {
 				put(rm, "host", scalar(r.host))
 				if r.path != "" {
 					put(rm, "path", scalar(r.path))
+				}
+				if r.securityHeaders {
+					put(rm, "security_headers", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+				}
+				if r.compress {
+					put(rm, "compress", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
 				}
 				routes.Content = append(routes.Content, rm)
 			}
@@ -1051,6 +1119,9 @@ func renderDeployService(s *deployService) *yaml.Node {
 	}
 	if s.replicas > 1 {
 		put(m, "replicas", scalarInt(s.replicas))
+	}
+	if s.schedule != "" {
+		put(m, "schedule", stringScalar(s.schedule))
 	}
 	if s.port > 0 {
 		put(m, "port", scalarInt(s.port))

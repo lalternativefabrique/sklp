@@ -1,0 +1,3 @@
+upstream: https://github.com/GoogleCloudPlatform/microservices-demo/blob/main/release/kubernetes-manifests.yaml
+license: Apache-2.0
+path: .

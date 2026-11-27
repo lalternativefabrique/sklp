@@ -1,0 +1,79 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 0 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: ServiceAccount bookinfo-details, bookinfo-productpage, bookinfo-ratings, bookinfo-reviews dropped: no Kubernetes API in a space
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # import: ready: no healthcheck: a TCP probe on port 9080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  details:
+    image: docker.io/istio/examples-bookinfo-details-v1:1.20.3
+    port: 9080
+    ready:
+      tcp: localhost:9080
+      timeout: 60s
+
+  # import: volumes: emptyDir tmp is the named volume productpage-tmp: unlike the emptyDir it survives a restart
+  # import: ready: no healthcheck: a TCP probe on port 9080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  productpage:
+    image: docker.io/istio/examples-bookinfo-productpage-v1:1.20.3
+    port: 9080
+    volumes:
+      - productpage-tmp:/tmp
+    ready:
+      tcp: localhost:9080
+      timeout: 60s
+
+  # import: ready: no healthcheck: a TCP probe on port 9080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  ratings:
+    image: docker.io/istio/examples-bookinfo-ratings-v1:1.20.3
+    port: 9080
+    ready:
+      tcp: localhost:9080
+      timeout: 60s
+
+  # import: volumes: emptyDir tmp is the named volume reviews-tmp: unlike the emptyDir it survives a restart
+  # import: volumes: emptyDir wlp-output is the named volume reviews-wlp-output: unlike the emptyDir it survives a restart
+  # import: ready: no healthcheck: a TCP probe on port 9080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  reviews:
+    image: docker.io/istio/examples-bookinfo-reviews-v1:1.20.3
+    port: 9080
+    env:
+      LOG_DIR: /tmp/logs
+    volumes:
+      - reviews-tmp:/tmp
+      - reviews-wlp-output:/opt/ibm/wlp/output
+    ready:
+      tcp: localhost:9080
+      timeout: 60s
+
+  # import: volumes: emptyDir tmp is the named volume reviews-v2-tmp: unlike the emptyDir it survives a restart
+  # import: volumes: emptyDir wlp-output is the named volume reviews-v2-wlp-output: unlike the emptyDir it survives a restart
+  # import: ready: no healthcheck: a TCP probe on port 9080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  reviews-v2:
+    image: docker.io/istio/examples-bookinfo-reviews-v2:1.20.3
+    port: 9080
+    env:
+      LOG_DIR: /tmp/logs
+    volumes:
+      - reviews-v2-tmp:/tmp
+      - reviews-v2-wlp-output:/opt/ibm/wlp/output
+    ready:
+      tcp: localhost:9080
+      timeout: 60s
+
+  # import: volumes: emptyDir tmp is the named volume reviews-v3-tmp: unlike the emptyDir it survives a restart
+  # import: volumes: emptyDir wlp-output is the named volume reviews-v3-wlp-output: unlike the emptyDir it survives a restart
+  # import: ready: no healthcheck: a TCP probe on port 9080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  reviews-v3:
+    image: docker.io/istio/examples-bookinfo-reviews-v3:1.20.3
+    port: 9080
+    env:
+      LOG_DIR: /tmp/logs
+    volumes:
+      - reviews-v3-tmp:/tmp
+      - reviews-v3-wlp-output:/opt/ibm/wlp/output
+    ready:
+      tcp: localhost:9080
+      timeout: 60s

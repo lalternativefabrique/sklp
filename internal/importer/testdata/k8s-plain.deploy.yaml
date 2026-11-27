@@ -1,0 +1,83 @@
+# Imported for production from k8s by `sklp init -from k8s -to deploy`.
+# 8 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# TODO(import): routes: Ingress api rewrites paths (rewrite-target): the gateway forwards paths unchanged — make the service serve them
+# import: routes: Ingress api TLS secrets dropped: the gateway obtains certificates itself
+# import: kinds: HorizontalPodAutoscaler api dropped: replicas are fixed: set replicas: to the load you expect
+# import: kinds: Secret app-secrets dropped: values are never copied: each one is a ${VAR} to set
+# TODO(import): kinds: no deploy.yaml equivalent for monitoring.example.com/v1 Dashboard/api: check what each one does and reproduce it by hand
+# import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
+# import: spaces: routes live in space k8s-plain-production: rename it to the space this deploy should own
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: API_TOKEN (the source wrote a value for it; never reuse that one in production), DB_PASSWORD (the source wrote a value for it; never reuse that one in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL
+version: 1
+kind: deploy
+name: prod
+
+gateway:
+  email: ${ACME_EMAIL}
+
+services:
+  # import: envFrom: every key of secret app-secrets is passed as ${KEY}
+  # TODO(import): command: Kubernetes command: replaced the image ENTRYPOINT; deploy.yaml's command: is appended to the ENTRYPOINT instead — it is kept as command+args, which only works when the image has no ENTRYPOINT
+  # TODO(import): ready: the livenessProbe ran `/bin/api health`, which a node cannot exec: set ready.http, ready.tcp or ready.log
+  # import: securityContext: capabilities NET_BIND_SERVICE copied; the node's admission policy refuses the dangerous ones at apply
+  # import: volumes: emptyDir cache is the named volume api-cache: unlike the emptyDir it survives a restart
+  # TODO(import): volumes: config mounts files from a ConfigMap/Secret on /etc/api: bake the files into the image (`COPY`) or pass the values through env
+  # import: port: Service api listened on 80 and forwarded to 8080: inside the space it is reached at api:8080, and the addresses in env were rewritten
+  # import: ports: the LoadBalancer Service published 9090: it is bound on every host address
+  # import: nodeSelector dropped: one node runs the whole deploy
+  # import: ready: no healthcheck: a TCP probe on port 8080 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  api:
+    image: ghcr.io/acme/api:2.3.1
+    command: [/bin/api, serve, --listen, ':8080']
+    replicas: 3
+    port: 8080
+    ports:
+      - 0.0.0.0:9090:9090
+    env:
+      API_TOKEN: ${API_TOKEN}
+      CACHE_DIR: /cache
+      DB_PASSWORD: ${DB_PASSWORD}
+      GREETING: /cache/greeting
+      TEMPLATE: hello $USER
+    volumes:
+      - api-cache:/cache
+    capabilities: [NET_BIND_SERVICE]
+    ready:
+      tcp: localhost:8080
+      timeout: 60s
+
+  # TODO(import): was a container of the Deployment/api pod, sharing localhost with api: inside the space it is a separate service — replace localhost:<port> between them with <service>:<port>, and give it the volumes they shared
+  # import: ready: no healthcheck: a TCP probe on port 10000 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  api-proxy:
+    image: envoyproxy/envoy:v1.31.0
+    port: 10000
+    ready:
+      tcp: localhost:10000
+      timeout: 60s
+
+  # TODO(import): image: ghcr.io/acme/docs:latest is not pinned: production must name an exact version (a rollout only changes what the file says)
+  # import: port: Service docs listened on 80 and forwarded to 8000: inside the space it is reached at docs:8000, and the addresses in env were rewritten
+  # import: ready: no healthcheck: a TCP probe on port 8000 gates rollouts, and it passes as soon as the port opens — set ready.http to a health endpoint
+  docs:
+    image: ghcr.io/acme/docs:latest
+    port: 8000
+    ready:
+      tcp: localhost:8000
+      timeout: 60s
+
+jobs:
+  # import: jobs: was a Job: it runs once per apply
+  # import: depends_on: inferred from the addresses it calls: api
+  seed:
+    image: ghcr.io/acme/api:2.3.1
+    command: [seed, --api, 'http://api:8080']
+    depends_on: [api]
+
+spaces:
+  k8s-plain-production:
+    gateway:
+      routes:
+        - service: api
+          host: api.acme.test
+        - service: docs
+          host: docs.acme.test

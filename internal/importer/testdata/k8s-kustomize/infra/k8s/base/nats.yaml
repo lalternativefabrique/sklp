@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: acme-nats
+spec:
+  clusterIP: None
+  selector:
+    app: acme-nats
+  ports:
+    - name: client
+      port: 4222
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nats
+spec:
+  serviceName: acme-nats
+  replicas: 1
+  selector:
+    matchLabels:
+      app: acme-nats
+  template:
+    metadata:
+      labels:
+        app: acme-nats
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.12-alpine
+          args: ["-js", "-sd", "/data"]
+          ports:
+            - containerPort: 4222
+              name: client
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 5Gi

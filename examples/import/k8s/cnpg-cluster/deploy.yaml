@@ -1,0 +1,37 @@
+# Imported for production from source by `sklp init -from k8s -to deploy`.
+# 1 manual action(s) left: grep TODO(import). Lines marked import: record a translation choice.
+# import: kinds: Secret backup-creds, cluster-example-app-user, cluster-example-superuser dropped: values are never copied: each one is a ${VAR} to set
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, POSTGRES_PASSWORD; settings — `sklp config set -s prod NAME value`: BACKUP_S3_REGION, BACKUP_S3_URL
+version: 1
+kind: deploy
+name: prod
+
+services:
+  # import: CloudNativePG Cluster cluster-example-full became the official postgres:19 image, named after its read-write Service cluster-example-full-rw; the cluster-example-full-ro and cluster-example-full-r addresses are rewritten to it
+  # import: 3 instances became one: a node runs a single postgres, without replicas
+  # import: volumes: the cluster's 1Gi volume data is not copied: pg_dump it from the cluster and restore it before switching traffic
+  # import: backup: the cluster's WAL archiving to object storage is replaced by the nightly pg_dump below
+  # import: backup: a nightly pg_dump is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none
+  cluster-example-full-rw:
+    image: postgres:19
+    command: [postgres, -c, auto_explain.log_min_duration=10s, -c, pg_stat_statements.max=10000, -c, pg_stat_statements.track=all, -c, shared_buffers=256MB]
+    port: 5432
+    env:
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_KEY}
+      POSTGRES_DB: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: app
+      SKLP_BACKUP_TO: ${BACKUP_S3_URL}
+    volumes:
+      - cluster-example-full-data:/var/lib/postgresql
+    resources:
+      cpu: "2"
+      memory: 1Gi
+    ready:
+      log: database system is ready to accept connections
+      timeout: 120s
+    backup:
+      schedule: 0 3 * * *
+      command: [sh, -c, exec pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"]

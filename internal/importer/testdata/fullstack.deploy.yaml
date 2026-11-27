@@ -4,7 +4,7 @@
 # import: profiles: services behind a compose profile are left out of production: mailpit — add them by hand if they belong there
 # import: gateway: the node gateway terminates TLS for every route with a Let's Encrypt certificate requested for ACME_EMAIL; point each route host's DNS at the node
 # import: spaces: routes live in space fullstack-production: rename it to the space this deploy should own
-# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: API_KEY, API_TOKEN (read from .env.api), BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, POSTGRES_PASSWORD (compose defaulted it; never reuse that default in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, BACKUP_S3_REGION, BACKUP_S3_URL
+# TODO(import): variables: sklp deploy refuses to start while one of these is unset (a git reconcile reads them from the Skalpai project secrets). secrets — `sklp config set -s prod -secret NAME value`: API_KEY, API_TOKEN (read from .env.api), BACKUP_S3_ACCESS_KEY, BACKUP_S3_SECRET_KEY, POSTGRES_PASSWORD (the source wrote a value for it; never reuse that one in production); settings — `sklp config set -s prod NAME value`: ACME_EMAIL, BACKUP_S3_REGION, BACKUP_S3_URL
 version: 1
 kind: deploy
 name: prod
@@ -20,7 +20,7 @@ services:
   # TODO(import): volumes: ./db/init.sql:/docker-entrypoint-initdb.d/init.sql is a host bind mount, and sklp only mounts named volumes. For init scripts: bake them into an image (`FROM postgres:16-alpine` + `COPY db/init.sql /docker-entrypoint-initdb.d/init.sql`), or run them from a oneshot run: service that depends on this one (e.g. `psql "$DATABASE_URL" -f db/init.sql`)
   # import: healthcheck: `pg_isready -U app` replaced by the log line "database system is ready to accept connections": the node cannot exec a probe
   # import: restart: dropped: the node restarts a service that exits, with backoff; a run-to-completion task belongs under jobs:
-  # import: backup: a nightly pg_dump is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); compose had no backup
+  # import: backup: a nightly pg_dump is streamed to BACKUP_S3_URL (https://<endpoint>/<bucket>/<prefix>/); the source had none
   postgres:
     image: postgres:16-alpine
     port: 5432
