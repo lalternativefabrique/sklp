@@ -18,7 +18,12 @@ cannot ask for it.
 - The grant lives in `~/.config/sklp/control-grants.json` (0600), with the
   space's owner (its recorded stack) at the time it was given.
 - The agent serves one Unix socket per grant, in a directory bind-mounted
-  read-only at `/run/sklp` in that service only. No TLS and no token: holding
+  read-only at `/run/sklp` in that service only. The directory sits in the
+  space's own state dir (`<cache>/spaces/<space>/control/<service>`), which is
+  0710 in the space's child-root group: runc opens the mount source from inside
+  the space's user namespace, and no other space or host account traverses it.
+  A config dir private to the agent (0700) cannot work: runc would be refused
+  there too. No TLS and no token: holding
   the socket is the credential, and no TCP path opens in the host guard.
 - Each request is checked against the grant: the space must still be owned by
   the owner the grant recorded (a space recreated under the same name by

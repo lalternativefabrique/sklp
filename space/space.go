@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lalternativefabrique/sklp/spacemanager/grants"
 	"io/fs"
 	"net"
 	"os"
@@ -71,7 +70,7 @@ type DeployService struct {
 	DevMounts []DevMount
 
 	// ControlSocketDir is the host directory holding this service's control
-	// grant socket, mounted read-only at grants.MountPoint. Set only when the
+	// grant socket, mounted read-only at ControlMountPoint. Set only when the
 	// node operator granted the service (`sklet console allow`); a manifest
 	// cannot ask for it.
 	ControlSocketDir string
@@ -481,7 +480,7 @@ func (s *Space) Start(ctx context.Context, svc DeployService) (int, error) {
 		mounts = append(mounts, vols...)
 	}
 	if svc.ControlSocketDir != "" {
-		mounts = append(mounts, DevMount{Source: svc.ControlSocketDir, Destination: grants.MountPoint, ReadOnly: true})
+		mounts = append(mounts, DevMount{Source: svc.ControlSocketDir, Destination: ControlMountPoint, ReadOnly: true})
 	}
 
 	// Image VOLUME directives (e.g. postgres' /var/lib/postgresql/data) need a

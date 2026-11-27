@@ -3,19 +3,25 @@ package spacemanager
 import (
 	"testing"
 
+	"github.com/lalternativefabrique/sklp/space"
 	"github.com/lalternativefabrique/sklp/spacemanager/grants"
 )
 
 func TestAGrantMountsInItsServiceOnlyWhateverTheInstanceID(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	webDir, err := space.ControlSocketDir("playground", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := grants.Put(grants.Grant{Space: "playground", Service: "web", Owner: "prod", Scope: grants.Read}); err != nil {
 		t.Fatal(err)
 	}
 	a := &Agent{}
 	l := &runcLauncher{space: "playground"}
 	cases := map[string]struct{ service, id, want string }{
-		"replica of the granted service":  {"web", "web-0", grants.Dir("playground", "web")},
-		"rollout generation":              {"web", "web-v3-0", grants.Dir("playground", "web")},
+		"replica of the granted service":  {"web", "web-0", webDir},
+		"rollout generation":              {"web", "web-v3-0", webDir},
 		"a service named like a rollout":  {"web-v2", "web-v2-0", ""},
 		"another service of the space":    {"api", "api-0", ""},
 		"a spec that never got a service": {"", "web-0", ""},

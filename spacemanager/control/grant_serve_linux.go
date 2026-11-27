@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lalternativefabrique/sklp/space"
 	"github.com/lalternativefabrique/sklp/spacemanager/grants"
 )
 
@@ -20,6 +21,7 @@ const grantReload = 5 * time.Second
 type grantListener struct {
 	grant grants.Grant
 	srv   *http.Server
+	sock  string
 }
 
 // ServeGrants keeps one Unix socket per grant, each answering the control API
@@ -57,9 +59,9 @@ func syncGrantListeners(live map[string]*grantListener, api http.Handler) {
 		wanted[g.Key()] = g
 	}
 	for key, l := range live {
-		if g, ok := wanted[key]; !ok || g != l.grant {
+		if g, ok := wanted[key]; !ok || g != l.grant || !socketStillThere(l.sock) {
 			_ = l.srv.Close()
-			_ = os.Remove(filepath.Join(grants.Dir(l.grant.Space, l.grant.Service), grants.SocketName))
+			_ = os.Remove(l.sock)
 			delete(live, key)
 		}
 	}
@@ -68,6 +70,9 @@ func syncGrantListeners(live map[string]*grantListener, api http.Handler) {
 			continue
 		}
 		l, err := listenGrant(g, api)
+		if errors.Is(err, errSpaceNotUp) {
+			continue
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "sklet: control grant %s: %v\n", key, err)
 			continue
@@ -76,15 +81,31 @@ func syncGrantListeners(live map[string]*grantListener, api http.Handler) {
 	}
 }
 
+var errSpaceNotUp = errors.New("space not materialised yet")
+
+// socketStillThere notices a space wiped and rebuilt under the agent: its
+// state dir, and the socket in it, are gone, so the listener must be redone.
+func socketStillThere(sock string) bool {
+	_, err := os.Lstat(sock)
+	return err == nil
+}
+
 func listenGrant(g grants.Grant, api http.Handler) (*grantListener, error) {
-	dir := grants.Dir(g.Space, g.Service)
-	// The parent stays private to the agent's user: no other account on the
-	// host reaches a socket. The container is not affected, it sees the
-	// bind-mounted directory itself, not its parents.
-	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+	dir, err := space.ControlSocketDir(g.Space, g.Service)
+	if err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(filepath.Dir(dir), 0o700); err != nil {
+	// The space's state dir is the space's own (0710, its child root's
+	// group): only that space traverses it, which is what keeps every other
+	// space and host account off the socket. It is never created here.
+	controlDir := filepath.Dir(dir)
+	if _, err := os.Stat(filepath.Dir(controlDir)); err != nil {
+		return nil, errSpaceNotUp
+	}
+	if err := os.MkdirAll(controlDir, 0o711); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(controlDir, 0o711); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -93,7 +114,7 @@ func listenGrant(g grants.Grant, api http.Handler) (*grantListener, error) {
 	if err := os.Chmod(dir, 0o755); err != nil {
 		return nil, err
 	}
-	sock := filepath.Join(dir, grants.SocketName)
+	sock := filepath.Join(dir, space.ControlSocketName)
 	if err := os.Remove(sock); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -110,7 +131,7 @@ func listenGrant(g grants.Grant, api http.Handler) (*grantListener, error) {
 	srv := newControlServer(grantGuard(g, api))
 	go func() { _ = srv.Serve(ln) }()
 	fmt.Fprintf(os.Stdout, "sklet: control grant %s (%s) on %s\n", g.Key(), g.Scope, sock)
-	return &grantListener{grant: g, srv: srv}, nil
+	return &grantListener{grant: g, srv: srv, sock: sock}, nil
 }
 
 func grantGuard(g grants.Grant, next http.Handler) http.Handler {

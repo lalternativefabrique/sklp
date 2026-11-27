@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lalternativefabrique/sklp/internal/cli"
+	sp "github.com/lalternativefabrique/sklp/space"
 	"github.com/lalternativefabrique/sklp/spacemanager/control"
 	"github.com/lalternativefabrique/sklp/spacemanager/grants"
 )
@@ -20,7 +21,7 @@ func consoleCommand() cli.Command {
 		Sub: []cli.Command{
 			{
 				Name:        "allow",
-				Short:       "Grant <space>/<service> a control socket at " + grants.MountPoint + "/" + grants.SocketName + "; restart the service to mount it",
+				Short:       "Grant <space>/<service> a control socket at " + sp.ControlMountPoint + "/" + sp.ControlSocketName + "; restart the service to mount it",
 				Positionals: []cli.Positional{{Name: "space/service"}},
 				Flags: []cli.Flag{
 					{Name: "scope", Type: cli.StringFlag, Usage: "read (spaces, state, manifests, logs, follows, watches), operate (read + follow, unfollow, restart) or admin (operate + apply, delete, exec); never the token, mesh or gateway", StringDefault: "read"},
@@ -46,7 +47,7 @@ func consoleCommand() cli.Command {
 						return 1
 					}
 					fmt.Printf("granted %s %s while the space is owned by %s\n", g.Key(), scope, owner)
-					fmt.Printf("restart it to mount %s/%s: sklp deploy restart %s -space %s\n", grants.MountPoint, grants.SocketName, service, space)
+					fmt.Printf("restart it to mount %s/%s: sklp deploy restart %s -space %s\n", sp.ControlMountPoint, sp.ControlSocketName, service, space)
 					return 0
 				},
 			},

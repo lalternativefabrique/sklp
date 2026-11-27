@@ -26,12 +26,6 @@ const (
 	Admin   Scope = "admin"
 )
 
-// MountPoint is where a granted service finds the socket, as SocketName.
-const (
-	MountPoint = "/run/sklp"
-	SocketName = "control.sock"
-)
-
 type Grant struct {
 	Space     string    `json:"space"`
 	Service   string    `json:"service"`
@@ -66,13 +60,6 @@ func configRoot() string {
 }
 
 func Path() string { return filepath.Join(configRoot(), "sklp", "control-grants.json") }
-
-// Dir is the host directory bind-mounted at MountPoint in the granted
-// service: the directory and not the socket file, so a socket the agent
-// recreates on restart shows up in a container that is already running.
-func Dir(space, service string) string {
-	return filepath.Join(configRoot(), "sklp", "grants", space+"."+service)
-}
 
 func Load() ([]Grant, error) {
 	data, err := os.ReadFile(Path())
