@@ -1052,6 +1052,7 @@ func (a *Agent) jobHeldFailedLocked(inst *instance) bool {
 func (a *Agent) newInstanceLocked(svcName string, spec Service, id string) *instance {
 	is := spec
 	is.Name = id
+	is.Service = svcName
 	return &instance{
 		id:      id,
 		svcName: svcName,
@@ -1905,6 +1906,7 @@ func (a *Agent) reconfigureJobLocked(st *serviceState, desired Service) {
 	for _, inst := range a.liveInstancesLocked(desired.Name) {
 		is := desired
 		is.Name = inst.id
+		is.Service = desired.Name
 		inst.svc = is
 		inst.jobFails = 0
 		inst.bo = newBackoff(a.opts.BackoffBase, a.opts.BackoffMax)

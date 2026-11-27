@@ -36,6 +36,11 @@ type Service struct {
 	// of every instance id (<Name>-0, <Name>-1, ...) and appears in logs.
 	Name string
 
+	// Service is the declared service an instance belongs to, set by the
+	// agent when Name becomes an instance id ("web-v2-0" may be replica 0 of
+	// "web-v2" or of "web" at generation 2: the id alone cannot tell).
+	Service string `json:"-"`
+
 	// Image is the OCI reference the runc launcher pulls and runs. The exec
 	// launcher (tests) ignores it.
 	Image string
